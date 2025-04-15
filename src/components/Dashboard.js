@@ -15,6 +15,8 @@ export const Dashboard = () => {
   const [vacacionesForm, setVacacionesForm] = useState({ FechaSalida: '', FechaEntrada: '' });
   const [diasTomadosPorColaborador, setDiasTomadosPorColaborador] = useState({});
   const [diasTomadosResumen, setDiasTomadosResumen] = useState(0);
+  const [vacacionesDetalle, setVacacionesDetalle] = useState([]);
+  const [showDetalleModal, setShowDetalleModal] = useState(false);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -22,6 +24,17 @@ export const Dashboard = () => {
       fetchDiasTomados();
     }
   }, [activeCard]);
+
+  const verDetalleVacaciones = async (cedula) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/vacaciones/${cedula}`);
+      const data = await response.json();
+      setVacacionesDetalle(data);
+      setShowDetalleModal(true);
+    } catch (error) {
+      console.error("Error al cargar detalle:", error);
+    }
+  };
 
   const fetchDiasTomados = async () => {
     try {
@@ -45,6 +58,7 @@ export const Dashboard = () => {
       const data = await response.json();
       setColaboradores(data);
       setCurrentPage(1);
+      await fetchDiasTomados(); // ← Asegura que cargues los días tomados antes de mostrar
       setShowVacacionesModal(true);
     } catch (error) {
       console.error("Error al obtener colaboradores:", error);
@@ -100,7 +114,8 @@ export const Dashboard = () => {
         FechaIngreso: selectedColaborador.FechaIngreso,
         FechaSalida: vacacionesForm.FechaSalida,
         FechaEntrada: vacacionesForm.FechaEntrada,
-        DiasTomados: diasTomados
+        DiasTomados: diasTomados,
+        Detalle: vacacionesForm.Detalle || ""
       };
       await fetch("http://localhost:3001/api/vacaciones", {
         method: "POST",
@@ -449,7 +464,7 @@ export const Dashboard = () => {
                       <td>{diasDisponibles}</td>
                       <td>{diasTomados}</td>
                       <td>
-                        <button className="btn btn-sm btn-info me-1">Detalles</button>
+                        <button className="btn btn-sm btn-info me-1" onClick={() => verDetalleVacaciones(colaborador.CedulaID)}>Detalles</button>
                         <button className="btn btn-sm btn-success" onClick={() => handleGenerarClick(colaborador)}>Generar</button>
                       </td>
                     </tr>
@@ -501,7 +516,13 @@ export const Dashboard = () => {
 
             <label className="mt-2">Fecha de Regreso:</label>
             <input type="date" className="form-control" value={vacacionesForm.FechaEntrada} onChange={(e) => setVacacionesForm({ ...vacacionesForm, FechaEntrada: e.target.value })} />
-
+            <label className="mt-2">Detalle:</label>
+            <textarea
+              className="form-control"
+              placeholder="Ej: Agarró vacaciones para el día del Padre"
+              value={vacacionesForm.Detalle || ""}
+              onChange={(e) => setVacacionesForm({ ...vacacionesForm, Detalle: e.target.value })}
+            />
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowGenerarVacaciones(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleGuardarVacaciones}>Guardar Boleta</button>
@@ -555,6 +576,9 @@ export const Dashboard = () => {
                 </div>
               ))}
 
+
+              
+
               {/* Agrupar Contraseña y Fecha en la misma fila */}
               <div className="formulario-col">
                 <label>Contraseña:</label>
@@ -583,6 +607,42 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+
+{/* Modal de detalles */}
+{showDetalleModal && (
+                <div className="modal-overlay" onClick={() => setShowDetalleModal(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <h3>Historial de Vacaciones</h3>
+                    <table className="table table-bordered table-hover table-striped">
+                      <thead className="table-dark">
+                        <tr>
+                          <th>Fecha Salida</th>
+                          <th>Fecha Entrada</th>
+                          <th>Días Tomados</th>
+                          <th>Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vacacionesDetalle.length > 0 ? vacacionesDetalle.map((v, i) => (
+                          <tr key={i}>
+                            <td>{v.FechaSalida?.slice(0, 10)}</td>
+                            <td>{v.FechaEntrada?.slice(0, 10)}</td>
+                            <td>{v.DiasTomados}</td>
+                            <td>{v.Detalle || 'Sin detalle'}</td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan="4" className="text-center text-muted">Sin registros</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                    <div className="text-end">
+                      <button className="btn btn-secondary" onClick={() => setShowDetalleModal(false)}>Cerrar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+      
 
       {/* Modal "Próximamente" */}
       {showComingSoon && (
