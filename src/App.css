@@ -64,7 +64,7 @@
   border-radius: 5px;
 }
 
-.div_form_colaboradores {
+/* .div_form_colaboradores {
   display: flex;
   justify-content: center;
   padding: 15px;
@@ -72,6 +72,17 @@
 
 .form_div_label_input {
   margin: 6px;
+} */
+
+.div_form_colaboradores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.form_div_label_input {
+  flex: 1;
+  min-width: 250px;
 }
 
 .form-select_option {
@@ -122,4 +133,29 @@
 .modal-content {
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.div_form_colaboradores {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form_div_label_input {
+  flex: 1;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formulario-grid-3cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.formulario-item {
+  display: flex;
+  flex-direction: column;
 }

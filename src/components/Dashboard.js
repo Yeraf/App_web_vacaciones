@@ -17,6 +17,12 @@ export const Dashboard = () => {
   const [diasTomadosResumen, setDiasTomadosResumen] = useState(0);
   const [vacacionesDetalle, setVacacionesDetalle] = useState([]);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
+  const [pagosColaborador, setPagosColaborador] = useState([]);
+  const [showPagosModal, setShowPagosModal] = useState(false);
+  const [modoEditarPago, setModoEditarPago] = useState(false);
+  const [idPagoEditando, setIdPagoEditando] = useState(null);
+  const [showFinanciamientosModal, setShowFinanciamientosModal] = useState(false);
+  const [financiamientosColaborador, setFinanciamientosColaborador] = useState([]);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -49,6 +55,18 @@ export const Dashboard = () => {
     } catch (error) {
       console.error("Error al cargar días tomados:", error);
     }
+  };
+
+  const cerrarModalCrearPago = () => {
+    setShowCrearPago(false);
+    setSelectedColaborador(null);
+    setModoEditarPago(false);
+    setIdPagoEditando(null);
+    setPagoForm({
+      Contrato: "", Cuenta: "", SalarioBase: 0, TipoPago: "Mensual",
+      HorasTrabajadas: 0, HorasExtra: 0, Comisiones: 0, Viaticos: 0,
+      CCSS: 0, Prestamos: 0, Vales: 0, Adelantos: 0, Ahorro: 0
+    });
   };
 
 
@@ -131,11 +149,11 @@ export const Dashboard = () => {
   };
 
   const cards = [
-    { id: "colaboradores", title: "Colaboradores", img: "/images/agregar-usuario.png" },
+    { id: "colaboradores", title: "COLABORADORES", img: "/images/agregar-usuario.png" },
     { id: "vacaciones", title: "VACACIONES", img: "/images/vacaciones.png" },
     { id: "planilla", title: "PLANILLA", img: "/images/aglutinante.png" },
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
-    { id: "disponible1", title: "DISPONIBLE", img: "/images/disponible.png" },
+    { id: "disponible1", title: "VALES", img: "/images/disponible.png" },
     { id: "disponible2", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
@@ -151,8 +169,22 @@ export const Dashboard = () => {
 
   const [colaboradorData, setColaboradorData] = useState({
     Nombre: "", Apellidos: "", CedulaID: "", IDColaborador: "", Telefono: "",
-    Direccion: "", Contrasena: "", Correo: "", FechaIngreso: "", Empresa: ""
+    Direccion: "", Contrasena: "", Correo: "", FechaIngreso: "", Empresa: "", Contrato: "", Cuenta: "", SalarioBase: 0
   });
+
+  const verFinanciamientosColaborador = async (cedula) => {
+    try {
+      const colaborador = colaboradores.find(c => c.CedulaID === cedula);
+      setSelectedColaborador(colaborador); // importante para mostrar el nombre
+
+      const response = await fetch(`http://localhost:3001/api/financiamientos/${cedula}`);
+      const data = await response.json();
+      setFinanciamientosColaborador(data);
+      setShowFinanciamientosModal(true);
+    } catch (error) {
+      console.error("Error al obtener financiamientos:", error);
+    }
+  };
 
   const handleChange = (e) => {
     setColaboradorData({ ...colaboradorData, [e.target.name]: e.target.value });
@@ -207,6 +239,18 @@ export const Dashboard = () => {
     }
   };
 
+  const handlePlanillaModal = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const data = await response.json();
+      setColaboradores(data);
+      setCurrentPage(1);
+      setActiveCard("planilla");
+    } catch (error) {
+      console.error("Error al obtener colaboradores:", error);
+    }
+  };
+
   const handleUpdateColaborador = async () => {
     try {
       console.log("Datos a enviar:", selectedColaborador); // 👈 Agregado para depurar
@@ -234,6 +278,163 @@ export const Dashboard = () => {
       handleView("colaboradores"); // Refrescar lista
     } catch (error) {
       console.error("Error al eliminar:", error);
+    }
+  };
+
+  const [showCrearPago, setShowCrearPago] = useState(false);
+  const [pagoForm, setPagoForm] = useState({
+    Contrato: "", Cuenta: "", SalarioBase: 0, TipoPago: "Mensual",
+    HorasTrabajadas: 0, HorasExtra: 0, Comisiones: 0, Viaticos: 0,
+    CCSS: 0, Prestamos: 0, Vales: 0, Adelantos: 0, Ahorro: 0
+  });
+
+  const editarPago = (pago) => {
+    setIdPagoEditando(pago.ID);
+    setSelectedColaborador({ Nombre: pago.Nombre, CedulaID: pago.CedulaID, FechaIngreso: pago.FechaIngreso });
+    setPagoForm({
+      Contrato: pago.Contrato,
+      Cuenta: pago.Cuenta,
+      SalarioBase: pago.SalarioBase,
+      TipoPago: pago.TipoPago,
+      HorasTrabajadas: pago.HorasTrabajadas,
+      HorasExtra: pago.HorasExtra,
+      Comisiones: pago.Comisiones,
+      Viaticos: pago.Viaticos,
+      CCSS: pago.CCSS,
+      Prestamos: pago.Prestamos,
+      Vales: pago.Vales,
+      Adelantos: pago.Adelantos,
+      Ahorro: pago.Ahorro
+    });
+    setShowCrearPago(true);
+    setModoEditarPago(true);
+  };
+
+  const calcularPagoTotal = (form) => {
+    let ingresoBase = 0;
+
+    switch (form.TipoPago) {
+      case "Mensual":
+        ingresoBase = form.SalarioBase;
+        break;
+      case "Quincenal":
+        ingresoBase = form.SalarioBase / 2;
+        break;
+      case "Horas":
+        ingresoBase = form.SalarioBase * form.HorasTrabajadas;
+        break;
+    }
+
+    const extras = form.HorasExtra * (form.SalarioBase / 30 / 8); // pago x hora extra (aprox)
+    const ingresos = ingresoBase + form.Comisiones + form.Viaticos + extras;
+    const egresos = form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
+
+    return ingresos - egresos;
+  };
+
+  const eliminarPago = async (id) => {
+    if (!window.confirm("¿Desea eliminar este pago?")) return;
+    try {
+      await fetch(`http://localhost:3001/api/pago-planilla/${id}`, {
+        method: "DELETE",
+      });
+      // Refrescar la tabla
+      if (selectedColaborador) {
+        verPagosColaborador(selectedColaborador.CedulaID);
+      }
+    } catch (error) {
+      console.error("Error al eliminar el pago:", error);
+    }
+  };
+
+  const [showFinanciamientoModal, setShowFinanciamientoModal] = useState(false);
+  const [financiamientoForm, setFinanciamientoForm] = useState({
+    CedulaID: "", Nombre: "", Producto: "", Monto: 0,
+    FechaCreacion: new Date().toISOString().slice(0, 10),
+    Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
+  });
+
+  const abrirModalFinanciamiento = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const data = await response.json();
+      setColaboradores(data);
+      setShowFinanciamientoModal(true);
+    } catch (error) {
+      console.error("Error al cargar colaboradores:", error);
+    }
+  };
+
+  const guardarPagoPlanilla = async () => {
+    const totalPagar = calcularPagoTotal(pagoForm);
+    const body = {
+      CedulaID: selectedColaborador.CedulaID,
+      Nombre: selectedColaborador.Nombre,
+      FechaIngreso: selectedColaborador.FechaIngreso,
+      ...pagoForm,
+      TotalPago: totalPagar
+    };
+
+    try {
+      let response;
+      if (modoEditarPago && idPagoEditando) {
+        response = await fetch(`http://localhost:3001/api/pago-planilla/${idPagoEditando}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        response = await fetch("http://localhost:3001/api/pago-planilla", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
+      const data = await response.json();
+      alert(data.message || "Pago guardado correctamente");
+      setShowCrearPago(false);
+      setModoEditarPago(false);
+      setIdPagoEditando(null);
+
+      if (selectedColaborador) {
+        verPagosColaborador(selectedColaborador.CedulaID);
+      }
+    } catch (error) {
+      console.error("Error al guardar pago:", error);
+    }
+  };
+
+  const guardarFinanciamiento = async () => {
+    try {
+      await fetch("http://localhost:3001/api/financiamientos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(financiamientoForm)
+      });
+      alert("Financiamiento guardado correctamente");
+      setShowFinanciamientoModal(false);
+      setFinanciamientoForm({
+        CedulaID: "", Nombre: "", Producto: "", Monto: 0,
+        FechaCreacion: new Date().toISOString().slice(0, 10),
+        Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
+      });
+    } catch (error) {
+      console.error("Error al guardar financiamiento:", error);
+    }
+  };
+
+  const verPagosColaborador = async (cedula) => {
+    try {
+      const colaborador = colaboradores.find(c => c.CedulaID === cedula);
+      setSelectedColaborador(colaborador); // ← ¡Esta línea es la clave!
+
+      const response = await fetch(`http://localhost:3001/api/pago-planilla/${cedula}`);
+      const data = await response.json();
+      setPagosColaborador(data);
+      setShowPagosModal(true);
+    } catch (error) {
+      console.error("Error al cargar pagos:", error);
     }
   };
 
@@ -308,8 +509,6 @@ export const Dashboard = () => {
                 </tr>
               )}
             </tbody>
-
-
           </table>
 
           <div className="d-flex justify-content-between align-items-center mt-3">
@@ -329,9 +528,6 @@ export const Dashboard = () => {
               Siguiente &gt;
             </button>
           </div>
-
-
-
         </div>
       );
     }
@@ -341,27 +537,38 @@ export const Dashboard = () => {
         return (
           <form onSubmit={handleSubmit}>
             <div className="div_form_colaboradores">
+              {/* Primera columna */}
               <div className="form_div_label_input">
                 <label>Nombre:</label>
                 <input type="text" className="form-control" name="Nombre" onChange={handleChange} required />
+
                 <label>Apellidos:</label>
                 <input type="text" className="form-control" name="Apellidos" onChange={handleChange} required />
+
                 <label>Cédula:</label>
                 <input type="tel" className="form-control" name="CedulaID" onChange={handleChange} required />
+
                 <label>Número de Colaborador:</label>
                 <input type="tel" className="form-control" name="IDColaborador" onChange={handleChange} required />
+
                 <label>Contraseña:</label>
                 <input type="password" className="form-control" name="Contrasena" onChange={handleChange} required />
               </div>
+
+              {/* Segunda columna */}
               <div className="form_div_label_input">
                 <label>Teléfono:</label>
                 <input type="tel" className="form-control" name="Telefono" onChange={handleChange} required />
+
                 <label>Correo:</label>
                 <input type="email" className="form-control" name="Correo" onChange={handleChange} required />
+
                 <label>Fecha de Ingreso:</label>
                 <input type="date" className="form-control" name="FechaIngreso" onChange={handleChange} required />
+
                 <label>Dirección:</label>
                 <input type="text" className="form-control" name="Direccion" onChange={handleChange} required />
+
                 <label>Empresa:</label>
                 <select className="form-select form-select_option" name="Empresa" onChange={handleChange} required>
                   <option value="">Selecciona una empresa</option>
@@ -369,6 +576,18 @@ export const Dashboard = () => {
                   <option value="Techno Noah">Techno Noah</option>
                   <option value="Super">Super</option>
                 </select>
+              </div>
+
+              {/* Tercera columna (nueva) */}
+              <div className="form_div_label_input">
+                <label>Contrato:</label>
+                <input type="text" className="form-control" name="Contrato" onChange={handleChange} />
+
+                <label>Cuenta:</label>
+                <input type="text" className="form-control" name="Cuenta" onChange={handleChange} />
+
+                <label>Salario Base:</label>
+                <input type="number" className="form-control" name="SalarioBase" onChange={handleChange} />
               </div>
             </div>
             <button type="submit" className="btn btn-primary mt-1">Guardar</button>
@@ -384,11 +603,7 @@ export const Dashboard = () => {
     }
   };
 
-
-
   ///////////////////////////////////////////////
-
-
 
   return (
     <div className="dashboard_principal">
@@ -404,6 +619,14 @@ export const Dashboard = () => {
                 onClick={() => {
                   if (card.id === "vacaciones") {
                     handleVacacionesModal();
+
+                    //////////////////////////////
+                  } if (card.id === "financiamientos") {
+                    abrirModalFinanciamiento();
+                  }
+                  /////////////////////////////////////
+                  else if (card.id === "planilla") {
+                    handlePlanillaModal();
                   } else {
                     setActiveCard(card.id);
                     setViewMode(false);
@@ -473,7 +696,6 @@ export const Dashboard = () => {
               </tbody>
             </table>
 
-
             <div className="d-flex justify-content-between align-items-center mt-3">
               <button
                 className="btn btn-outline-primary"
@@ -496,6 +718,57 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showCrearPago && selectedColaborador && (
+        <div className="modal-overlay" onClick={() => setShowCrearPago(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Crear Pago para {selectedColaborador.Nombre}</h3>
+
+            <div className="formulario-grid-3cols">
+              {[
+                ["Contrato", "text"], ["Cuenta", "text"], ["SalarioBase", "number"], ["TipoPago", "select"],
+                ["HorasTrabajadas", "number"], ["HorasExtra", "number"], ["Comisiones", "number"],
+                ["Viaticos", "number"], ["CCSS", "number"], ["Prestamos", "number"],
+                ["Vales", "number"], ["Adelantos", "number"], ["Ahorro", "number"]
+              ].map(([campo, tipo]) => (
+                <div key={campo} className="formulario-item">
+                  <label>{campo}</label>
+                  {tipo === "select" ? (
+                    <select
+                      className="form-control"
+                      value={pagoForm.TipoPago}
+                      onChange={(e) => setPagoForm({ ...pagoForm, TipoPago: e.target.value })}
+                    >
+                      <option value="Mensual">Mensual</option>
+                      <option value="Quincenal">Quincenal</option>
+                      <option value="Horas">Por Horas</option>
+                    </select>
+                  ) : (
+                    <input
+                      type={tipo}
+                      className="form-control"
+                      value={pagoForm[campo]}
+                      readOnly={campo === "Contrato"} // ← Esto es lo nuevo
+                      onChange={(e) =>
+                        setPagoForm({
+                          ...pagoForm,
+                          [campo]: tipo === "number" ? parseFloat(e.target.value) || 0 : e.target.value
+                        })
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <hr />
+            <p><strong>Total a Pagar: </strong>₡{calcularPagoTotal(pagoForm).toLocaleString()}</p>
+            <div className="text-end">
+              <button className="btn btn-secondary me-2" onClick={cerrarModalCrearPago}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarPagoPlanilla}>Guardar Pago</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showGenerarVacaciones && selectedColaborador && (
         <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}>
@@ -532,7 +805,8 @@ export const Dashboard = () => {
       )}
 
       {/* Modal para formularios */}
-      {activeCard && (
+      {activeCard && activeCard !== "planilla" && (
+
         <div className="modal-overlay " onClick={() => setActiveCard(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>{viewMode ? "Ver" : "Crear"} {cards.find((c) => c.id === activeCard)?.title}</h2>
@@ -562,22 +836,18 @@ export const Dashboard = () => {
               <input type="file" accept="image/*" onChange={handleFotoChange} className="form-control mt-2" />
             </div>
 
-
             <div className="formulario-grid">
-              {["Nombre", "Apellidos", "CedulaID", "IDColaborador", "Telefono", "Correo", "Direccion", "Empresa"].map((campo) => (
+              {["Nombre", "Apellidos", "CedulaID", "IDColaborador", "Telefono", "Correo", "Direccion", "Empresa", "Contrato", "Cuenta", "SalarioBase"].map((campo) => (
                 <div className="formulario-col" key={campo}>
                   <label>{campo}:</label>
                   <input
-                    type="text"
+                    type={campo === "SalarioBase" ? "number" : "text"}
                     className="form-control form-control-sm"
                     value={selectedColaborador[campo] || ""}
                     onChange={(e) => setSelectedColaborador({ ...selectedColaborador, [campo]: e.target.value })}
                   />
                 </div>
               ))}
-
-
-              
 
               {/* Agrupar Contraseña y Fecha en la misma fila */}
               <div className="formulario-col">
@@ -609,42 +879,321 @@ export const Dashboard = () => {
       )}
 
 
-{/* Modal de detalles */}
-{showDetalleModal && (
-                <div className="modal-overlay" onClick={() => setShowDetalleModal(false)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                    <h3>Historial de Vacaciones</h3>
-                    <table className="table table-bordered table-hover table-striped">
-                      <thead className="table-dark">
-                        <tr>
-                          <th>Fecha Salida</th>
-                          <th>Fecha Entrada</th>
-                          <th>Días Tomados</th>
-                          <th>Detalle</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vacacionesDetalle.length > 0 ? vacacionesDetalle.map((v, i) => (
-                          <tr key={i}>
-                            <td>{v.FechaSalida?.slice(0, 10)}</td>
-                            <td>{v.FechaEntrada?.slice(0, 10)}</td>
-                            <td>{v.DiasTomados}</td>
-                            <td>{v.Detalle || 'Sin detalle'}</td>
-                          </tr>
-                        )) : (
-                          <tr><td colSpan="4" className="text-center text-muted">Sin registros</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                    <div className="text-end">
-                      <button className="btn btn-secondary" onClick={() => setShowDetalleModal(false)}>Cerrar</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-      
+
+      {/* Modal de detalles */}
+
+      {showDetalleModal && (
+        <div className="modal-overlay" onClick={() => setShowDetalleModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Historial de Vacaciones</h3>
+            <table className="table table-bordered table-hover table-striped">
+              <thead className="table-dark">
+                <tr>
+                  <th>Fecha Salida</th>
+                  <th>Fecha Entrada</th>
+                  <th>Días Tomados</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vacacionesDetalle.length > 0 ? vacacionesDetalle.map((v, i) => (
+                  <tr key={i}>
+                    <td>{v.FechaSalida?.slice(0, 10)}</td>
+                    <td>{v.FechaEntrada?.slice(0, 10)}</td>
+                    <td>{v.DiasTomados}</td>
+                    <td>{v.Detalle || 'Sin detalle'}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan="4" className="text-center text-muted">Sin registros</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowDetalleModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ********************************************* */}
+
+      {showFinanciamientosModal && (
+        <div className="modal-overlay" onClick={() => setShowFinanciamientosModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Financiamientos de {selectedColaborador?.Nombre}</h3>
+
+            <table className="table table-bordered table-hover table-striped mt-2">
+              <thead className="table-dark">
+                <tr>
+                  <th>Producto</th>
+                  <th>Monto</th>
+                  <th>Fecha</th>
+                  <th>Plazo</th>
+                  <th>Interés (%)</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {financiamientosColaborador.length > 0 ? (
+                  financiamientosColaborador.map((f, index) => (
+                    <tr key={index}>
+                      <td>{f.Producto}</td>
+                      <td>₡{f.Monto.toLocaleString()}</td>
+                      <td>{f.FechaCreacion?.slice(0, 10)}</td>
+                      <td>{f.Plazo}</td>
+                      <td>{f.InteresPorcentaje}</td>
+                      <td>{f.Descripcion}</td>
+                      <td>{f.Estado}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan="7" className="text-center text-muted">Sin financiamientos registrados</td></tr>
+                )}
+              </tbody>
+            </table>
+
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowFinanciamientosModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFinanciamientoModal && (
+        <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Crear Financiamiento</h3>
+
+            <label>Buscar Colaborador (por nombre o cédula):</label>
+            <input
+              className="form-control mb-2"
+              type="text"
+              placeholder="Buscar..."
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+
+            <select
+              className="form-select mb-2"
+              onChange={(e) => {
+                const selected = colaboradores.find(c => c.CedulaID === e.target.value);
+                if (selected) {
+                  setFinanciamientoForm(prev => ({
+                    ...prev,
+                    CedulaID: selected.CedulaID,
+                    Nombre: `${selected.Nombre} ${selected.Apellidos}`
+                  }));
+                }
+              }}
+            >
+              <option value="">Seleccione un colaborador</option>
+              {colaboradores
+                .filter(c =>
+                  c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((colaborador, idx) => (
+                  <option key={idx} value={colaborador.CedulaID}>
+                    {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
+                  </option>
+                ))}
+            </select>
+
+            <label>Producto:</label>
+            <input
+              type="text"
+              className="form-control"
+              value={financiamientoForm.Producto}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Producto: e.target.value })}
+            />
+
+            <label>Monto:</label>
+            <input
+              type="number"
+              className="form-control"
+              value={financiamientoForm.Monto}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Monto: parseFloat(e.target.value) || 0 })}
+            />
+
+            <label>Fecha de Creación:</label>
+            <input
+              type="date"
+              className="form-control"
+              value={financiamientoForm.FechaCreacion}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, FechaCreacion: e.target.value })}
+            />
+
+            <label>Plazo (meses):</label>
+            <input
+              type="number"
+              className="form-control"
+              value={financiamientoForm.Plazo}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Plazo: parseInt(e.target.value) || 0 })}
+            />
+
+            <label>Interés (%):</label>
+            <input
+              type="number"
+              className="form-control"
+              value={financiamientoForm.InteresPorcentaje}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, InteresPorcentaje: parseFloat(e.target.value) || 0 })}
+            />
+
+            <label>Descripción:</label>
+            <textarea
+              className="form-control"
+              rows={3}
+              value={financiamientoForm.Descripcion}
+              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Descripcion: e.target.value })}
+            />
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowFinanciamientoModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarFinanciamiento}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeCard === "planilla" && !showCrearPago && (
+        <div className="modal-overlay" onClick={() => setActiveCard(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Gestión de Pagos - Planilla</h2>
+            <div className="mb-3 d-flex justify-content-between align-items-center">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar por nombre o cédula..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <span className="text-muted">Total: {filteredColaboradores.length} colaboradores</span>
+            </div>
+            <table className="table table-bordered table-hover table-striped">
+              <thead className="table-dark">
+                <tr>
+                  <th>#</th>
+                  <th>Nombre completo</th>
+                  <th>Cédula</th>
+                  <th>Puesto</th>
+                  <th>Fecha Ingreso</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedColaboradores.map((colaborador, index) => (
+                  <tr key={index}>
+                    <td>{(currentPage - 1) * rowsPerPage + index + 1}</td>
+                    <td>{`${colaborador.Nombre} ${colaborador.Apellidos}`}</td>
+                    <td>{colaborador.CedulaID}</td>
+                    <td>{colaborador.Puesto || "—"}</td>
+                    <td>{colaborador.FechaIngreso?.slice(0, 10)}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-success me-1"
+                        onClick={() => {
+                          setSelectedColaborador(colaborador);
+                          setPagoForm((prev) => ({
+                            ...prev,
+                            Contrato: colaborador.Contrato || "",
+                            Cuenta: colaborador.Cuenta || "",
+                            SalarioBase: colaborador.SalarioBase || 0
+                          }));
+                          setShowCrearPago(true);
+                        }}
+                      >
+                        Crear Pago
+                      </button>
+                      <button
+                        className="btn btn-sm btn-info"
+                        onClick={() => verPagosColaborador(colaborador.CedulaID)}
+                      >
+                        Ver Pagos
+                      </button>
+                      <button
+                        className="btn btn-sm btn-info"
+                        onClick={() => verFinanciamientosColaborador(colaborador.CedulaID)}
+                      >
+                        Ver Financiamientos
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {showPagosModal && (
+        <div className="modal-overlay" onClick={() => setShowPagosModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Pagos realizados a {selectedColaborador?.Nombre}</h3>
+            <table className="table table-bordered table-hover table-striped">
+              <thead className="table-dark">
+                <tr>
+                  <th>Fecha</th>
+                  <th>Total Pago</th>
+                  <th>Horas</th>
+                  <th>Extras</th>
+                  <th>Comisiones</th>
+                  <th>Viáticos</th>
+                  <th>CCSS</th>
+                  <th>Préstamos</th>
+                  <th>Vales</th>
+                  <th>Adelantos</th>
+                  <th>Ahorro</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagosColaborador.length > 0 ? (
+                  pagosColaborador.map((pago, index) => (
+                    <tr key={index}>
+                      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                      <td>₡{pago.TotalPago.toLocaleString()}</td>
+                      <td>{pago.HorasTrabajadas}</td>
+                      <td>{pago.HorasExtra}</td>
+                      <td>{pago.Comisiones}</td>
+                      <td>{pago.Viaticos}</td>
+                      <td>{pago.CCSS}</td>
+                      <td>{pago.Prestamos}</td>
+                      <td>{pago.Vales}</td>
+                      <td>{pago.Adelantos}</td>
+                      <td>{pago.Ahorro}</td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-warning me-1"
+                          onClick={() => editarPago(pago)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => eliminarPago(pago.ID)}
+                          data-bs-toggle="tooltip"
+                          data-bs-placement="bottom"
+                          title="Eliminar el Pago"
+                        >
+                          -
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan="11" className="text-center text-muted">Sin pagos registrados</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowPagosModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal "Próximamente" */}
+
       {showComingSoon && (
         <div className="modal-overlay" onClick={() => setShowComingSoon(false)}>
           <div className="modal-content coming-soon" onClick={(e) => e.stopPropagation()}>
