@@ -154,28 +154,40 @@ app.delete('/api/colaboradores/:id', async (req, res) => {
 });
 
 // POST - Guardar boleta de vacaciones
-app.post('/api/vacaciones', async (req, res) => {
+app.post("/api/vacaciones", async (req, res) => {
+  const {
+    CedulaID, Nombre, FechaIngreso,
+    FechaSalida, FechaEntrada, DiasTomados,
+    Detalle, NumeroBoleta
+  } = req.body;
+
   try {
-    const { CedulaID, Nombre, FechaIngreso, FechaSalida, FechaEntrada, DiasTomados, Detalle } = req.body;
-
-    const pool = await sql.connect(dbConfig);
     await pool.request()
-      .input('CedulaID', sql.NVarChar, CedulaID)
-      .input('Nombre', sql.NVarChar, Nombre)
-      .input('FechaIngreso', sql.Date, FechaIngreso)
-      .input('FechaSalida', sql.Date, FechaSalida)
-      .input('FechaEntrada', sql.Date, FechaEntrada)
-      .input('DiasTomados', sql.Int, DiasTomados)
-      .input('Detalle', sql.NVarChar(sql.MAX), Detalle)
+      .input("CedulaID", CedulaID)
+      .input("Nombre", Nombre)
+      .input("FechaIngreso", FechaIngreso)
+      .input("FechaSalida", FechaSalida)
+      .input("FechaEntrada", FechaEntrada)
+      .input("DiasTomados", DiasTomados)
+      .input("Detalle", Detalle)
+      .input("NumeroBoleta", NumeroBoleta) // 👈 Asegúrate de incluirlo
       .query(`
-          INSERT INTO BoletaVacaciones (CedulaID, Nombre, FechaIngreso, FechaSalida, FechaEntrada, DiasTomados, Detalle)
-          VALUES (@CedulaID, @Nombre, @FechaIngreso, @FechaSalida, @FechaEntrada, @DiasTomados, @Detalle)
-        `);
+        INSERT INTO BoletaVacaciones (
+          CedulaID, Nombre, FechaIngreso,
+          FechaSalida, FechaEntrada, DiasTomados,
+          Detalle, NumeroBoleta
+        )
+        VALUES (
+          @CedulaID, @Nombre, @FechaIngreso,
+          @FechaSalida, @FechaEntrada, @DiasTomados,
+          @Detalle, @NumeroBoleta
+        )
+      `);
 
-    res.status(201).json({ message: 'Boleta de vacaciones guardada correctamente' });
+    res.status(200).json({ message: "Boleta guardada exitosamente" });
   } catch (error) {
-    console.error("Error al guardar boleta de vacaciones:", error);
-    res.status(500).json({ error: 'Error al guardar boleta' });
+    console.error("Error insertando boleta:", error);
+    res.status(500).json({ error: "Error al guardar boleta" });
   }
 });
 
@@ -346,5 +358,43 @@ app.get("/api/financiamientos/:cedula", async (req, res) => {
   } catch (err) {
     console.error("Error al obtener financiamientos:", err);
     res.status(500).json({ message: "Error al obtener financiamientos." });
+  }
+});
+
+app.post('/api/vales', async (req, res) => {
+  const { CedulaID, Nombre, FechaRegistro, MontoVale, Empresa, Motivo } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('FechaRegistro', sql.Date, FechaRegistro)
+      .input('MontoVale', sql.Decimal(18, 2), MontoVale)
+      .input('Empresa', sql.NVarChar, Empresa)
+      .input('Motivo', sql.NVarChar(sql.MAX), Motivo)
+      .query(`
+        INSERT INTO Vales (CedulaID, Nombre, FechaRegistro, MontoVale, Empresa, Motivo)
+        VALUES (@CedulaID, @Nombre, @FechaRegistro, @MontoVale, @Empresa, @Motivo)
+      `);
+
+    res.status(201).json({ message: 'Vale guardado correctamente' });
+  } catch (error) {
+    console.error("Error al guardar vale:", error);
+    res.status(500).json({ error: 'Error al guardar vale' });
+  }
+});
+
+app.get('/api/vales/:cedula', async (req, res) => {
+  try {
+    const cedula = req.params.cedula;
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('CedulaID', sql.NVarChar, cedula)
+      .query(`SELECT * FROM Vales WHERE CedulaID = @CedulaID ORDER BY FechaRegistro DESC`);
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error al obtener vales:", error);
+    res.status(500).json({ message: 'Error al obtener vales' });
   }
 });

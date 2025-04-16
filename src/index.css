@@ -186,3 +186,13 @@ code {
   padding: 6px 8px;
   font-size: 0.9rem;
 }
+
+.formulario-grid-3cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.formulario-item {
+  display: flex;
+  flex-direction: column;
+}

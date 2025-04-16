@@ -12,7 +12,9 @@ export const Dashboard = () => {
   const [previewFoto, setPreviewFoto] = useState(null); // vista previa para edición
   const [showVacacionesModal, setShowVacacionesModal] = useState(false);
   const [showGenerarVacaciones, setShowGenerarVacaciones] = useState(false);
-  const [vacacionesForm, setVacacionesForm] = useState({ FechaSalida: '', FechaEntrada: '' });
+  const [vacacionesForm, setVacacionesForm] = useState({
+    FechaSalida: '', FechaEntrada: '', Detalle: '', NumeroBoleta: ''
+  });
   const [diasTomadosPorColaborador, setDiasTomadosPorColaborador] = useState({});
   const [diasTomadosResumen, setDiasTomadosResumen] = useState(0);
   const [vacacionesDetalle, setVacacionesDetalle] = useState([]);
@@ -23,6 +25,7 @@ export const Dashboard = () => {
   const [idPagoEditando, setIdPagoEditando] = useState(null);
   const [showFinanciamientosModal, setShowFinanciamientosModal] = useState(false);
   const [financiamientosColaborador, setFinanciamientosColaborador] = useState([]);
+  const [fotoBase64, setFotoBase64] = useState(null);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -100,11 +103,36 @@ export const Dashboard = () => {
     return Math.floor((f2 - f1) / (1000 * 60 * 60 * 24));
   };
 
-  const handleGenerarClick = (colaborador) => {
+  const generarNumeroBoleta = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/vacaciones");
+      const boletas = await response.json();
+
+      const añoActual = new Date().getFullYear();
+      const cantidadEsteAño = boletas.filter(b => b.NumeroBoleta?.includes(`BV-${añoActual}`)).length + 1;
+      const numero = String(cantidadEsteAño).padStart(3, '0');
+
+      return `BV-${añoActual}-${numero}`;
+    } catch (error) {
+      console.error("Error generando número de boleta:", error);
+      return `BV-${new Date().getFullYear()}-XXX`;
+    }
+  };
+
+  const handleGenerarClick = async (colaborador) => {
     setSelectedColaborador(colaborador);
-    setVacacionesForm({ FechaSalida: '', FechaEntrada: '' });
     const resumen = diasTomadosPorColaborador[colaborador.CedulaID?.trim()] || 0;
     setDiasTomadosResumen(resumen);
+
+    const numeroBoleta = await generarNumeroBoleta(); // 👈 Aquí la magia
+
+    setVacacionesForm({
+      FechaSalida: '',
+      FechaEntrada: '',
+      Detalle: '',
+      NumeroBoleta: numeroBoleta
+    });
+
     setShowGenerarVacaciones(true);
   };
 
@@ -133,7 +161,8 @@ export const Dashboard = () => {
         FechaSalida: vacacionesForm.FechaSalida,
         FechaEntrada: vacacionesForm.FechaEntrada,
         DiasTomados: diasTomados,
-        Detalle: vacacionesForm.Detalle || ""
+        Detalle: vacacionesForm.Detalle || "",
+        NumeroBoleta: vacacionesForm.NumeroBoleta // 👈 agregado aquí
       };
       await fetch("http://localhost:3001/api/vacaciones", {
         method: "POST",
@@ -149,11 +178,11 @@ export const Dashboard = () => {
   };
 
   const cards = [
-    { id: "colaboradores", title: "COLABORADORES", img: "/images/agregar-usuario.png" },
-    { id: "vacaciones", title: "VACACIONES", img: "/images/vacaciones.png" },
+    { id: "colaboradores", title: "Colaboradores", img: "/images/agregar-usuario.png" },
+    { id: "vacaciones", title: "Vacaciones", img: "/images/vacaciones.png" },
     { id: "planilla", title: "PLANILLA", img: "/images/aglutinante.png" },
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
-    { id: "disponible1", title: "VALES", img: "/images/disponible.png" },
+    { id: "vales", title: "VALES", img: "/images/disponible.png" },
     { id: "disponible2", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
@@ -208,10 +237,15 @@ export const Dashboard = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const body = {
+        ...colaboradorData,
+        Foto: fotoBase64 // ⬅️ agrega esta línea
+      };
+
       const response = await fetch("http://localhost:3001/api/colaboradores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(colaboradorData),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -221,6 +255,12 @@ export const Dashboard = () => {
       console.error("Error al insertar:", error);
     }
   };
+
+  const [showValesModal, setShowValesModal] = useState(false);
+  const [valeForm, setValeForm] = useState({
+    CedulaID: "", Nombre: "", FechaRegistro: new Date().toISOString().slice(0, 10),
+    MontoVale: 0, Empresa: "", Motivo: ""
+  });
 
   const handleView = async (cardId) => {
     if (cardId === "colaboradores") {
@@ -250,6 +290,23 @@ export const Dashboard = () => {
       console.error("Error al obtener colaboradores:", error);
     }
   };
+
+  function calcularDiasHabiles(fechaInicio, fechaFin, diasLibres) {
+    let inicio = new Date(fechaInicio);
+    let fin = new Date(fechaFin);
+    let contador = 0;
+  
+    // Normalizamos: sumamos 1 día a la fecha fin para incluirlo si es necesario
+    fin.setDate(fin.getDate() + 1);
+  
+    for (let d = new Date(inicio); d < fin; d.setDate(d.getDate() + 1)) {
+      // Si el día de la semana NO es uno de los días libres, lo contamos
+      if (!diasLibres.includes(d.getDay())) {
+        contador++;
+      }
+    }
+    return contador;
+  }
 
   const handleUpdateColaborador = async () => {
     try {
@@ -404,6 +461,35 @@ export const Dashboard = () => {
       console.error("Error al guardar pago:", error);
     }
   };
+
+  const [diasSolicitados, setDiasSolicitados] = useState(0);
+  // Estado para días libres
+  const [diasLibresSeleccionados, setDiasLibresSeleccionados] = useState([]);
+
+  useEffect(() => {
+    if (vacacionesForm.FechaSalida && vacacionesForm.FechaEntrada) {
+      setDiasSolicitados(
+        calcularDiasHabiles(
+          vacacionesForm.FechaSalida,
+          vacacionesForm.FechaEntrada,
+          diasLibresSeleccionados // aquí va el arreglo de días libres
+        )
+      );
+    } else {
+      setDiasSolicitados(0);
+    }
+  }, [vacacionesForm.FechaSalida, vacacionesForm.FechaEntrada, diasLibresSeleccionados]);
+ 
+  // Días de la semana para mostrar checkboxes
+  const diasSemana = [
+    { label: "Domingo", value: 0 },
+    { label: "Lunes", value: 1 },
+    { label: "Martes", value: 2 },
+    { label: "Miércoles", value: 3 },
+    { label: "Jueves", value: 4 },
+    { label: "Viernes", value: 5 },
+    { label: "Sábado", value: 6 },
+  ];
 
   const guardarFinanciamiento = async () => {
     try {
@@ -586,8 +672,32 @@ export const Dashboard = () => {
                 <label>Cuenta:</label>
                 <input type="text" className="form-control" name="Cuenta" onChange={handleChange} />
 
-                <label>Salario Base:</label>
+                <label>Salario Base Quincenal:</label>
                 <input type="number" className="form-control" name="SalarioBase" onChange={handleChange} />
+                {/* ⬇ NUEVO campo para subir imagen */}
+                <div className="text-center mt-3">
+                  <label className="form-label">Foto del colaborador:</label>
+                  <div>
+                    <img
+                      src={fotoBase64 || "/images/user-placeholder.png"}
+                      alt="Vista previa"
+                      className="img-thumbnail mb-2"
+                      style={{ width: "150px", height: "150px", objectFit: "cover" }}
+                    />
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onloadend = () => setFotoBase64(reader.result);
+                      reader.readAsDataURL(file);
+                    }}
+                    className="form-control mt-2"
+                  />
+                </div>
               </div>
             </div>
             <button type="submit" className="btn btn-primary mt-1">Guardar</button>
@@ -616,16 +726,21 @@ export const Dashboard = () => {
               <button
                 type="button"
                 className="btn btn-warning btn_dashboard btn_dashboard_button"
-                onClick={() => {
+                onClick={async () => {
                   if (card.id === "vacaciones") {
                     handleVacacionesModal();
-
-                    //////////////////////////////
-                  } if (card.id === "financiamientos") {
+                  } else if (card.id === "financiamientos") {
                     abrirModalFinanciamiento();
-                  }
-                  /////////////////////////////////////
-                  else if (card.id === "planilla") {
+                  } else if (card.id === "vales") {
+                    try {
+                      const response = await fetch("http://localhost:3001/api/colaboradores");
+                      const data = await response.json();
+                      setColaboradores(data);
+                      setShowValesModal(true);
+                    } catch (error) {
+                      console.error("Error al cargar colaboradores para vales:", error);
+                    }
+                  } else if (card.id === "planilla") {
                     handlePlanillaModal();
                   } else {
                     setActiveCard(card.id);
@@ -774,28 +889,94 @@ export const Dashboard = () => {
         <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Boleta de Vacaciones</h3>
-            <label>Cédula:</label>
-            <input type="text" className="form-control" value={selectedColaborador.CedulaID} readOnly />
-            <label>Nombre:</label>
-            <input type="text" className="form-control" value={selectedColaborador.Nombre} readOnly />
-            <label>Fecha Ingreso:</label>
-            <input type="date" className="form-control" value={selectedColaborador.FechaIngreso?.slice(0, 10)} readOnly />
 
-            <label>Días Disponibles:</label>
-            <input type="number" className="form-control" value={calcularDias(selectedColaborador.FechaIngreso, selectedColaborador.CedulaID).diasDisponibles} readOnly />
+            <div className="formulario-grid-3cols">
+              <div className="formulario-item">
+                <label>Número Boleta:</label>
+                <input type="text" className="form-control" value={vacacionesForm.NumeroBoleta} readOnly />
+              </div>
+              <div className="formulario-item">
+                <label>Cédula:</label>
+                <input type="text" className="form-control" value={selectedColaborador.CedulaID} readOnly />
+              </div>
+              <div className="formulario-item">
+                <label>Nombre:</label>
+                <input type="text" className="form-control" value={selectedColaborador.Nombre} readOnly />
+              </div>
 
-            <label className="mt-2">Fecha de Salida:</label>
-            <input type="date" className="form-control" value={vacacionesForm.FechaSalida} onChange={(e) => setVacacionesForm({ ...vacacionesForm, FechaSalida: e.target.value })} />
+              <div className="formulario-item">
+                <label>Fecha Ingreso:</label>
+                <input type="date" className="form-control" value={selectedColaborador.FechaIngreso?.slice(0, 10)} readOnly />
+              </div>
+              <div className="formulario-item">
+                <label>Días Disponibles:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={calcularDias(selectedColaborador.FechaIngreso, selectedColaborador.CedulaID).diasDisponibles}
+                  readOnly
+                />
+              </div>
+              <div className="formulario-item">
+                <label>Fecha de Salida:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={vacacionesForm.FechaSalida}
+                  onChange={(e) => setVacacionesForm({ ...vacacionesForm, FechaSalida: e.target.value })}
+                />
+              </div>
 
-            <label className="mt-2">Fecha de Regreso:</label>
-            <input type="date" className="form-control" value={vacacionesForm.FechaEntrada} onChange={(e) => setVacacionesForm({ ...vacacionesForm, FechaEntrada: e.target.value })} />
-            <label className="mt-2">Detalle:</label>
-            <textarea
-              className="form-control"
-              placeholder="Ej: Agarró vacaciones para el día del Padre"
-              value={vacacionesForm.Detalle || ""}
-              onChange={(e) => setVacacionesForm({ ...vacacionesForm, Detalle: e.target.value })}
-            />
+              <div className="formulario-item">
+                <label>Fecha de Regreso:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={vacacionesForm.FechaEntrada}
+                  onChange={(e) => setVacacionesForm({ ...vacacionesForm, FechaEntrada: e.target.value })}
+                />
+              </div>
+              <div className="formulario-item formulario-dias-libres">
+                <label>Días Libres:</label>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {diasSemana.map((dia) => (
+                    <div key={dia.value} style={{ display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={diasLibresSeleccionados.includes(dia.value)}
+                        onChange={(e) => {
+                          setDiasLibresSeleccionados((prev) =>
+                            e.target.checked
+                              ? [...prev, dia.value]
+                              : prev.filter((d) => d !== dia.value)
+                          );
+                        }}
+                      />
+                      <span style={{ marginLeft: 4 }}>{dia.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="formulario-item">
+                <label>Días Solicitados:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={diasSolicitados}
+                  readOnly
+                />
+              </div>
+              <div className="formulario-item formulario-textarea-fullwidth">
+                <label>Detalle:</label>
+                <textarea
+                  className="form-control"
+                  placeholder="Ej: Agarró vacaciones para el día del Padre"
+                  value={vacacionesForm.Detalle || ""}
+                  onChange={(e) => setVacacionesForm({ ...vacacionesForm, Detalle: e.target.value })}
+                />
+              </div>
+            </div>
+
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowGenerarVacaciones(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleGuardarVacaciones}>Guardar Boleta</button>
@@ -805,7 +986,7 @@ export const Dashboard = () => {
       )}
 
       {/* Modal para formularios */}
-      {activeCard && activeCard !== "planilla" && (
+      {activeCard && !["planilla", "vales", "financiamientos", "vacaciones"].includes(activeCard) && (
 
         <div className="modal-overlay " onClick={() => setActiveCard(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -960,6 +1141,106 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showValesModal && (
+        <div className="modal-overlay" onClick={() => setShowValesModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Crear Vale</h3>
+
+            <label>Buscar Colaborador (por nombre o cédula):</label>
+            <input
+              className="form-control mb-2"
+              type="text"
+              placeholder="Buscar..."
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+
+            <select
+              className="form-select mb-2"
+              onChange={(e) => {
+                const selected = colaboradores.find(c => c.CedulaID === e.target.value);
+                if (selected) {
+                  setValeForm(prev => ({
+                    ...prev,
+                    CedulaID: selected.CedulaID,
+                    Nombre: `${selected.Nombre} ${selected.Apellidos}`
+                  }));
+                }
+              }}
+            >
+              <option value="">Seleccione un colaborador</option>
+              {colaboradores
+                .filter(c =>
+                  c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((colaborador, idx) => (
+                  <option key={idx} value={colaborador.CedulaID}>
+                    {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
+                  </option>
+                ))}
+            </select>
+
+            <label>Fecha de Registro:</label>
+            <input
+              type="date"
+              className="form-control"
+              value={valeForm.FechaRegistro}
+              onChange={(e) => setValeForm({ ...valeForm, FechaRegistro: e.target.value })}
+            />
+
+            <label>Monto del Vale:</label>
+            <input
+              type="number"
+              className="form-control"
+              value={valeForm.MontoVale}
+              onChange={(e) => setValeForm({ ...valeForm, MontoVale: parseFloat(e.target.value) || 0 })}
+            />
+
+            <label>Empresa:</label>
+            <input
+              type="text"
+              className="form-control"
+              value={valeForm.Empresa}
+              onChange={(e) => setValeForm({ ...valeForm, Empresa: e.target.value })}
+            />
+
+            <label>Motivo:</label>
+            <textarea
+              className="form-control"
+              rows={3}
+              value={valeForm.Motivo}
+              onChange={(e) => setValeForm({ ...valeForm, Motivo: e.target.value })}
+            />
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowValesModal(false)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={async () => {
+                  try {
+                    await fetch("http://localhost:3001/api/vales", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(valeForm)
+                    });
+                    alert("Vale registrado correctamente");
+                    setShowValesModal(false);
+                    setValeForm({
+                      CedulaID: "", Nombre: "", FechaRegistro: new Date().toISOString().slice(0, 10),
+                      MontoVale: 0, Empresa: "", Motivo: ""
+                    });
+                  } catch (err) {
+                    console.error("Error al guardar vale:", err);
+                  }
+                }}
+              >
+                Guardar Vale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showFinanciamientoModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1109,12 +1390,6 @@ export const Dashboard = () => {
                         onClick={() => verPagosColaborador(colaborador.CedulaID)}
                       >
                         Ver Pagos
-                      </button>
-                      <button
-                        className="btn btn-sm btn-info"
-                        onClick={() => verFinanciamientosColaborador(colaborador.CedulaID)}
-                      >
-                        Ver Financiamientos
                       </button>
                     </td>
                   </tr>
