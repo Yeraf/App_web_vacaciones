@@ -13,7 +13,7 @@ code {
 }
 
 .layout {
-  width: 93%;
+  width: 98%;
   margin: 0 auto;
 }
 
@@ -66,7 +66,7 @@ code {
 }
 
 .header .active {
-  color: rgb(45, 182, 192);
+  color: rgb(1, 238, 255);
 }
 
 .NavLink {
@@ -75,7 +75,11 @@ code {
 }
 
 .NavLink:hover {
-  color: rgb(45, 182, 192);
+  color: #00208a;
+}
+
+.NavLink.dashboard_sidebar.active {
+  padding-top: 900px;
 }
 
 .header li a {
@@ -94,18 +98,17 @@ code {
 }
 
 .footer {
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  transform: translateX(-50%);
-  min-height: 30px; /* Asegura altura suficiente */
-  display: flex; /* Habilita flexbox */
-  align-items: center; /* Centra verticalmente */
-  justify-content: center; /* Centra horizontalmente */
-  text-align: center; /* Asegura que el texto esté centrado */
+  width: 100%;
   background-color: rgb(215, 219, 217);
-  padding: 10px 0; /* Espaciado interno */
   color: rgb(12, 31, 36);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 0;
+  position: relative; /* o fixed si lo querés pegado abajo siempre */
+  z-index: 500;
 }
 
 /* Aplica a todo el contenedor principal de la aplicación */
@@ -195,4 +198,205 @@ code {
 .formulario-item {
   display: flex;
   flex-direction: column;
+}
+
+.formulario-grid-3cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.formulario-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.formulario-grid-2cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* NAVBAR SIDEBAR  */
+
+
+
+/* Contenedor principal que respeta el sidebar */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+/* SECCIÓN DE CONTENIDO CENTRAL */
+.content_section {
+  margin-top: 60px; /* altura del topbar */
+  margin-left: 220px; /* espacio reservado al sidebar */
+  padding: 20px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+.sidebar.closed ~ .content_section {
+  margin-left: 0;
+}
+
+/* TOPBAR */
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #051d22;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 1000;
+}
+
+.hamburger {
+  font-size: 24px;
+  background: none;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.logo-topbar {
+  display: flex;
+  align-items: center;
+}
+
+.logo_alpaca {
+  height: 35px;
+  width: 35px;
+  margin-right: 10px;
+}
+
+.nombre_empresa {
+  margin: 0;
+  font-size: 18px;
+  color: white;
+}
+
+/* SIDEBAR */
+.sidebar {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  width: 220px;
+  height: calc(100vh - 60px);
+  background-color: #f8f9fa;
+  overflow: auto;
+  transition: transform 0.3s ease-in-out;
+  z-index: 999;
+}
+
+.sidebar.closed {
+  transform: translateX(-100%);
+}
+
+.sidebar.open {
+  transform: translateX(0);
+  background-image: url('/public/images/967298.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.sidebar nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar nav ul li {
+  padding: 15px 20px;
+}
+
+.NavLink {
+  text-decoration: none;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.NavLink.active {
+  color: #00208a;
+}
+
+.sidebar-blur-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(130, 179, 206, 0.3); /* oscurece un poco */
+  backdrop-filter: blur(0px);
+  z-index: 1;
+}
+
+.sidebar nav {
+  position: relative;
+  z-index: 2;
+}
+
+.logo_contacto {
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  margin-bottom: 3px;
+}
+
+.login-container {
+  max-width: 400px;
+  margin: 100px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  background-color: white;
+}
+.login-container input {
+  padding: 10px;
+}
+.login-container button {
+  padding: 10px;
+  background-color: teal;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+/* .footer {
+  transition: margin-left 0.3s ease;
+}
+
+.footer.sidebar-open {
+  margin-left: 220px;
+}
+
+.footer.sidebar-closed {
+  margin-left: 0;
+} */
+
+.sidebar nav ul li .NavLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+/* Fondo gris cálido cuando está activo */
+.sidebar nav ul li .NavLink.active {
+  background-color: #e4e4e4; /* gris cálido */
+  color: #000000;
+}
+
+/* Hover opcional */
+.sidebar nav ul li .NavLink:hover {
+  background-color: #f2f2f2;
 }

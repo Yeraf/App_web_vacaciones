@@ -64,16 +64,6 @@
   border-radius: 5px;
 }
 
-/* .div_form_colaboradores {
-  display: flex;
-  justify-content: center;
-  padding: 15px;
-}
-
-.form_div_label_input {
-  margin: 6px;
-} */
-
 .div_form_colaboradores {
   display: flex;
   flex-wrap: wrap;
@@ -158,4 +148,20 @@
 .formulario-item {
   display: flex;
   flex-direction: column;
+}
+
+.footer {
+  background-color: rgb(215, 219, 217);
+  color: #0c1f24;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 0;
+  margin-top: 50px; /* separación visual del contenido */
+  border-top: 2px solid #ccc;
+  width: 100%; /* ocupará el 100% del ancho del contenedor padre */
+  bottom: 0;
+  left: 0;
 }

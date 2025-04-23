@@ -160,8 +160,9 @@ app.post("/api/vacaciones", async (req, res) => {
     FechaSalida, FechaEntrada, DiasTomados,
     Detalle, NumeroBoleta
   } = req.body;
-
+  console.log("Boleta recibida:", req.body);
   try {
+    const pool = await sql.connect(dbConfig); // ← necesario aquí
     await pool.request()
       .input("CedulaID", CedulaID)
       .input("Nombre", Nombre)
@@ -170,7 +171,7 @@ app.post("/api/vacaciones", async (req, res) => {
       .input("FechaEntrada", FechaEntrada)
       .input("DiasTomados", DiasTomados)
       .input("Detalle", Detalle)
-      .input("NumeroBoleta", NumeroBoleta) // 👈 Asegúrate de incluirlo
+      .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
       .query(`
         INSERT INTO BoletaVacaciones (
           CedulaID, Nombre, FechaIngreso,
@@ -396,5 +397,156 @@ app.get('/api/vales/:cedula', async (req, res) => {
   } catch (error) {
     console.error("Error al obtener vales:", error);
     res.status(500).json({ message: 'Error al obtener vales' });
+  }
+});
+
+app.get("/api/vacaciones/numeroboleta", async (req, res) => {
+  try {
+    const result = await pool
+      .request()
+      .query("SELECT TOP 1 NumeroBoleta FROM BoletaVacaciones ORDER BY ID DESC");
+
+    let ultimoNumero = result.recordset.length > 0 ? result.recordset[0].NumeroBoleta : null;
+
+    let nuevoNumero;
+    if (ultimoNumero && ultimoNumero.startsWith("NB")) {
+      const numero = parseInt(ultimoNumero.substring(2)) + 1;
+      nuevoNumero = `NB${numero.toString().padStart(3, '0')}`;
+    } else {
+      nuevoNumero = "NB001"; // Valor inicial si no hay registros
+    }
+
+    res.json({ numeroBoleta: nuevoNumero });
+  } catch (error) {
+    console.error("Error generando número de boleta:", error);
+    res.status(500).json({ error: "Error interno generando número de boleta" });
+  }
+});
+
+app.get('/api/financiamientos', async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request().query("SELECT * FROM Financiamientos ORDER BY FechaCreacion DESC");
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error al obtener financiamientos:", err);
+    res.status(500).json({ error: 'Error en el servidor' });
+  }
+});
+
+app.put('/api/financiamientos/:id', async (req, res) => {
+  const id = req.params.id;
+  const {
+    CedulaID, Nombre, Producto, Monto, FechaCreacion,
+    Plazo, InteresPorcentaje, Descripcion
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('Producto', sql.NVarChar, Producto)
+      .input('Monto', sql.Decimal(18, 2), Monto)
+      .input('FechaCreacion', sql.Date, FechaCreacion)
+      .input('Plazo', sql.Int, Plazo)
+      .input('InteresPorcentaje', sql.Decimal(5, 2), InteresPorcentaje || 0)
+      .input('Descripcion', sql.NVarChar(sql.MAX), Descripcion)
+      .query(`
+        UPDATE Financiamientos SET
+          CedulaID = @CedulaID,
+          Nombre = @Nombre,
+          Producto = @Producto,
+          Monto = @Monto,
+          FechaCreacion = @FechaCreacion,
+          Plazo = @Plazo,
+          InteresPorcentaje = @InteresPorcentaje,
+          Descripcion = @Descripcion
+        WHERE ID = @ID
+      `);
+
+    res.json({ message: "Financiamiento actualizado correctamente" });
+  } catch (error) {
+    console.error("Error al actualizar financiamiento:", error);
+    res.status(500).json({ error: 'Error al actualizar financiamiento' });
+  }
+});
+
+// PUT - Actualizar financiamiento por ID
+app.put('/api/financiamientos/:id', async (req, res) => {
+  const id = req.params.id;
+  const {
+    CedulaID, Nombre, Producto, Monto, FechaCreacion,
+    Plazo, InteresPorcentaje, Descripcion
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('Producto', sql.NVarChar, Producto)
+      .input('Monto', sql.Decimal(18, 2), Monto)
+      .input('FechaCreacion', sql.Date, FechaCreacion)
+      .input('Plazo', sql.Int, Plazo)
+      .input('InteresPorcentaje', sql.Decimal(5, 2), InteresPorcentaje || 0)
+      .input('Descripcion', sql.NVarChar(sql.MAX), Descripcion)
+      .query(`
+        UPDATE Financiamientos SET
+          CedulaID = @CedulaID,
+          Nombre = @Nombre,
+          Producto = @Producto,
+          Monto = @Monto,
+          FechaCreacion = @FechaCreacion,
+          Plazo = @Plazo,
+          InteresPorcentaje = @InteresPorcentaje,
+          Descripcion = @Descripcion
+        WHERE ID = @ID
+      `);
+    res.json({ message: "Financiamiento actualizado correctamente" });
+  } catch (error) {
+    console.error("Error al actualizar financiamiento:", error);
+    res.status(500).json({ error: "Error al actualizar financiamiento" });
+  }
+});
+
+app.put('/api/financiamientos/:id', async (req, res) => {
+  const id = req.params.id;
+  const {
+    CedulaID, Nombre, Producto, Monto, FechaCreacion,
+    Plazo, InteresPorcentaje, Descripcion
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre)
+      .input("Producto", sql.NVarChar, Producto)
+      .input("Monto", sql.Decimal(18, 2), Monto)
+      .input("FechaCreacion", sql.Date, FechaCreacion)
+      .input("Plazo", sql.Int, Plazo)
+      .input("InteresPorcentaje", sql.Decimal(5, 2), InteresPorcentaje || 0)
+      .input("Descripcion", sql.NVarChar(sql.MAX), Descripcion)
+      .query(`
+        UPDATE Financiamientos SET
+          CedulaID = @CedulaID,
+          Nombre = @Nombre,
+          Producto = @Producto,
+          Monto = @Monto,
+          FechaCreacion = @FechaCreacion,
+          Plazo = @Plazo,
+          InteresPorcentaje = @InteresPorcentaje,
+          Descripcion = @Descripcion
+        WHERE ID = @ID
+      `);
+
+    res.json({ message: "Financiamiento actualizado correctamente" });
+  } catch (error) {
+    console.error("Error actualizando financiamiento:", error);
+    res.status(500).json({ error: 'Error al actualizar financiamiento' });
   }
 });

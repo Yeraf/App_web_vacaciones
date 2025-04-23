@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Footer } from "./layout/Footer";
 
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
@@ -26,6 +27,10 @@ export const Dashboard = () => {
   const [showFinanciamientosModal, setShowFinanciamientosModal] = useState(false);
   const [financiamientosColaborador, setFinanciamientosColaborador] = useState([]);
   const [fotoBase64, setFotoBase64] = useState(null);
+  const [listaFinanciamientos, setListaFinanciamientos] = useState([]);
+  const [showVerFinanciamientos, setShowVerFinanciamientos] = useState(false);
+  const [modoEditarFinanciamiento, setModoEditarFinanciamiento] = useState(false);
+  const [idFinanciamientoEditando, setIdFinanciamientoEditando] = useState(null);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -105,33 +110,33 @@ export const Dashboard = () => {
 
   const generarNumeroBoleta = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/vacaciones");
-      const boletas = await response.json();
-
-      const añoActual = new Date().getFullYear();
-      const cantidadEsteAño = boletas.filter(b => b.NumeroBoleta?.includes(`BV-${añoActual}`)).length + 1;
-      const numero = String(cantidadEsteAño).padStart(3, '0');
-
-      return `BV-${añoActual}-${numero}`;
+      const response = await fetch("http://localhost:3001/api/vacaciones/numeroboleta");
+      const data = await response.json();
+      console.log("Respuesta completa de numeroboleta:", data); // 👀
+      return data.numeroBoleta; // <-- Aquí sabrás si es undefined
     } catch (error) {
       console.error("Error generando número de boleta:", error);
-      return `BV-${new Date().getFullYear()}-XXX`;
+      return `NB???`;
     }
   };
+
+  const [numeroBoletaTemp, setNumeroBoletaTemp] = useState("");
 
   const handleGenerarClick = async (colaborador) => {
     setSelectedColaborador(colaborador);
     const resumen = diasTomadosPorColaborador[colaborador.CedulaID?.trim()] || 0;
     setDiasTomadosResumen(resumen);
 
-    const numeroBoleta = await generarNumeroBoleta(); // 👈 Aquí la magia
+    const numeroBoletaGenerado = await generarNumeroBoleta();
+    setNumeroBoletaTemp(numeroBoletaGenerado);
 
-    setVacacionesForm({
+    setVacacionesForm((prev) => ({
+      ...prev,
+      NumeroBoleta: numeroBoletaGenerado,
       FechaSalida: '',
       FechaEntrada: '',
       Detalle: '',
-      NumeroBoleta: numeroBoleta
-    });
+    }));
 
     setShowGenerarVacaciones(true);
   };
@@ -155,6 +160,7 @@ export const Dashboard = () => {
     try {
       const diasTomados = calcularDiasVacaciones(vacacionesForm.FechaSalida, vacacionesForm.FechaEntrada);
       const body = {
+        NumeroBoleta: vacacionesForm.NumeroBoleta,
         CedulaID: selectedColaborador.CedulaID,
         Nombre: selectedColaborador.Nombre,
         FechaIngreso: selectedColaborador.FechaIngreso,
@@ -162,8 +168,11 @@ export const Dashboard = () => {
         FechaEntrada: vacacionesForm.FechaEntrada,
         DiasTomados: diasTomados,
         Detalle: vacacionesForm.Detalle || "",
-        NumeroBoleta: vacacionesForm.NumeroBoleta // 👈 agregado aquí
       };
+      if (!vacacionesForm.NumeroBoleta || vacacionesForm.NumeroBoleta.trim() === "") {
+        alert("Por favor, ingrese el número de boleta.");
+        return;
+      }
       await fetch("http://localhost:3001/api/vacaciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,6 +181,7 @@ export const Dashboard = () => {
       alert("Vacaciones registradas correctamente");
       setShowGenerarVacaciones(false);
       fetchDiasTomados();
+      console.log("Boleta que se enviará:", body);
     } catch (error) {
       console.error("Error al guardar vacaciones:", error);
     }
@@ -212,6 +222,18 @@ export const Dashboard = () => {
       setShowFinanciamientosModal(true);
     } catch (error) {
       console.error("Error al obtener financiamientos:", error);
+    }
+  };
+
+  const verListaFinanciamientos = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/financiamientos");
+      const data = await response.json();
+      console.log("Financiamientos recibidos:", data); // 👈
+      setListaFinanciamientos(data);
+      setShowVerFinanciamientos(true); // 👈 asegúrate que esto se ejecuta
+    } catch (error) {
+      console.error("Error al obtener la lista de financiamientos:", error);
     }
   };
 
@@ -295,10 +317,10 @@ export const Dashboard = () => {
     let inicio = new Date(fechaInicio);
     let fin = new Date(fechaFin);
     let contador = 0;
-  
+
     // Normalizamos: sumamos 1 día a la fecha fin para incluirlo si es necesario
     fin.setDate(fin.getDate() + 1);
-  
+
     for (let d = new Date(inicio); d < fin; d.setDate(d.getDate() + 1)) {
       // Si el día de la semana NO es uno de los días libres, lo contamos
       if (!diasLibres.includes(d.getDay())) {
@@ -479,7 +501,7 @@ export const Dashboard = () => {
       setDiasSolicitados(0);
     }
   }, [vacacionesForm.FechaSalida, vacacionesForm.FechaEntrada, diasLibresSeleccionados]);
- 
+
   // Días de la semana para mostrar checkboxes
   const diasSemana = [
     { label: "Domingo", value: 0 },
@@ -493,20 +515,36 @@ export const Dashboard = () => {
 
   const guardarFinanciamiento = async () => {
     try {
-      await fetch("http://localhost:3001/api/financiamientos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(financiamientoForm)
-      });
-      alert("Financiamiento guardado correctamente");
+      let response;
+      if (modoEditarFinanciamiento && financiamientoForm.ID) {
+        response = await fetch(`http://localhost:3001/api/financiamientos/${financiamientoForm.ID}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(financiamientoForm)
+        });
+      } else {
+        response = await fetch("http://localhost:3001/api/financiamientos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(financiamientoForm)
+        });
+      }
+
+      const data = await response.json();
+      alert(data.message || "Financiamiento procesado correctamente");
+
       setShowFinanciamientoModal(false);
+      setModoEditarFinanciamiento(false);
       setFinanciamientoForm({
         CedulaID: "", Nombre: "", Producto: "", Monto: 0,
         FechaCreacion: new Date().toISOString().slice(0, 10),
         Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
       });
+
+      verListaFinanciamientos(); // Actualiza la lista si estás en modo VER
     } catch (error) {
       console.error("Error al guardar financiamiento:", error);
+      alert("Error al guardar financiamiento");
     }
   };
 
@@ -753,7 +791,13 @@ export const Dashboard = () => {
               <button
                 type="button"
                 className="btn btn-success btn_dashboard btn_dashboard_button"
-                onClick={() => handleView(card.id)}
+                onClick={() => {
+                  if (card.id === "financiamientos") {
+                    verListaFinanciamientos(); // 👈 este es el nuevo para mostrar lista
+                  } else {
+                    handleView(card.id); // lo demás sigue como estaba
+                  }
+                }}
               >
                 VER
               </button>
@@ -891,10 +935,18 @@ export const Dashboard = () => {
             <h3>Boleta de Vacaciones</h3>
 
             <div className="formulario-grid-3cols">
+
               <div className="formulario-item">
                 <label>Número Boleta:</label>
-                <input type="text" className="form-control" value={vacacionesForm.NumeroBoleta} readOnly />
+                <input
+                  type="text"
+                  className="form-control"
+                  value={vacacionesForm.NumeroBoleta}
+                  onChange={(e) => setVacacionesForm({ ...vacacionesForm, NumeroBoleta: e.target.value })}
+                  required
+                />
               </div>
+
               <div className="formulario-item">
                 <label>Cédula:</label>
                 <input type="text" className="form-control" value={selectedColaborador.CedulaID} readOnly />
@@ -1095,9 +1147,7 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
-
       {/* ********************************************* */}
-
       {showFinanciamientosModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientosModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1146,71 +1196,79 @@ export const Dashboard = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Crear Vale</h3>
 
-            <label>Buscar Colaborador (por nombre o cédula):</label>
-            <input
-              className="form-control mb-2"
-              type="text"
-              placeholder="Buscar..."
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <div className="formulario-grid-2cols">
+              {/* Columna 1 */}
+              <div className="formulario-item">
+                <label>Buscar Colaborador (por nombre o cédula):</label>
+                <input
+                  className="form-control mb-2"
+                  type="text"
+                  placeholder="Buscar..."
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
 
-            <select
-              className="form-select mb-2"
-              onChange={(e) => {
-                const selected = colaboradores.find(c => c.CedulaID === e.target.value);
-                if (selected) {
-                  setValeForm(prev => ({
-                    ...prev,
-                    CedulaID: selected.CedulaID,
-                    Nombre: `${selected.Nombre} ${selected.Apellidos}`
-                  }));
-                }
-              }}
-            >
-              <option value="">Seleccione un colaborador</option>
-              {colaboradores
-                .filter(c =>
-                  c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map((colaborador, idx) => (
-                  <option key={idx} value={colaborador.CedulaID}>
-                    {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
-                  </option>
-                ))}
-            </select>
+                <select
+                  className="form-select mb-2"
+                  onChange={(e) => {
+                    const selected = colaboradores.find(c => c.CedulaID === e.target.value);
+                    if (selected) {
+                      setValeForm(prev => ({
+                        ...prev,
+                        CedulaID: selected.CedulaID,
+                        Nombre: `${selected.Nombre} ${selected.Apellidos}`
+                      }));
+                    }
+                  }}
+                >
+                  <option value="">Seleccione un colaborador</option>
+                  {colaboradores
+                    .filter(c =>
+                      c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
+                    )
+                    .map((colaborador, idx) => (
+                      <option key={idx} value={colaborador.CedulaID}>
+                        {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
+                      </option>
+                    ))}
+                </select>
 
-            <label>Fecha de Registro:</label>
-            <input
-              type="date"
-              className="form-control"
-              value={valeForm.FechaRegistro}
-              onChange={(e) => setValeForm({ ...valeForm, FechaRegistro: e.target.value })}
-            />
+                <label>Empresa:</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={valeForm.Empresa}
+                  onChange={(e) => setValeForm({ ...valeForm, Empresa: e.target.value })}
+                />
+              </div>
 
-            <label>Monto del Vale:</label>
-            <input
-              type="number"
-              className="form-control"
-              value={valeForm.MontoVale}
-              onChange={(e) => setValeForm({ ...valeForm, MontoVale: parseFloat(e.target.value) || 0 })}
-            />
+              {/* Columna 2 */}
+              <div className="formulario-item">
+                <label>Fecha de Registro:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={valeForm.FechaRegistro}
+                  onChange={(e) => setValeForm({ ...valeForm, FechaRegistro: e.target.value })}
+                />
 
-            <label>Empresa:</label>
-            <input
-              type="text"
-              className="form-control"
-              value={valeForm.Empresa}
-              onChange={(e) => setValeForm({ ...valeForm, Empresa: e.target.value })}
-            />
+                <label>Monto del Vale:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={valeForm.MontoVale}
+                  onChange={(e) => setValeForm({ ...valeForm, MontoVale: parseFloat(e.target.value) || 0 })}
+                />
 
-            <label>Motivo:</label>
-            <textarea
-              className="form-control"
-              rows={3}
-              value={valeForm.Motivo}
-              onChange={(e) => setValeForm({ ...valeForm, Motivo: e.target.value })}
-            />
+                <label>Motivo:</label>
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  value={valeForm.Motivo}
+                  onChange={(e) => setValeForm({ ...valeForm, Motivo: e.target.value })}
+                />
+              </div>
+            </div>
 
             <div className="text-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowValesModal(false)}>Cancelar</button>
@@ -1244,90 +1302,72 @@ export const Dashboard = () => {
       {showFinanciamientoModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Crear Financiamiento</h3>
+            <h3>{modoEditarFinanciamiento ? "Editar Financiamiento" : "Crear Financiamiento"}</h3>
 
-            <label>Buscar Colaborador (por nombre o cédula):</label>
-            <input
-              className="form-control mb-2"
-              type="text"
-              placeholder="Buscar..."
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <div className="formulario-grid-2cols">
+              {/* Columna 1 */}
+              <div className="formulario-item">
+                {modoEditarFinanciamiento && (
+                  <>
+                    <label>Colaborador:</label>
+                    <input type="text" className="form-control" value={financiamientoForm.Nombre} readOnly />
+                  </>
+                )}
 
-            <select
-              className="form-select mb-2"
-              onChange={(e) => {
-                const selected = colaboradores.find(c => c.CedulaID === e.target.value);
-                if (selected) {
-                  setFinanciamientoForm(prev => ({
-                    ...prev,
-                    CedulaID: selected.CedulaID,
-                    Nombre: `${selected.Nombre} ${selected.Apellidos}`
-                  }));
-                }
-              }}
-            >
-              <option value="">Seleccione un colaborador</option>
-              {colaboradores
-                .filter(c =>
-                  c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map((colaborador, idx) => (
-                  <option key={idx} value={colaborador.CedulaID}>
-                    {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
-                  </option>
-                ))}
-            </select>
+                <label>Producto:</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={financiamientoForm.Producto}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Producto: e.target.value })}
+                />
 
-            <label>Producto:</label>
-            <input
-              type="text"
-              className="form-control"
-              value={financiamientoForm.Producto}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Producto: e.target.value })}
-            />
+                <label className="mt-2">Monto:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={financiamientoForm.Monto}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Monto: parseFloat(e.target.value) || 0 })}
+                />
 
-            <label>Monto:</label>
-            <input
-              type="number"
-              className="form-control"
-              value={financiamientoForm.Monto}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Monto: parseFloat(e.target.value) || 0 })}
-            />
+                <label className="mt-2">Fecha de Creación:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={financiamientoForm.FechaCreacion}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, FechaCreacion: e.target.value })}
+                />
+              </div>
 
-            <label>Fecha de Creación:</label>
-            <input
-              type="date"
-              className="form-control"
-              value={financiamientoForm.FechaCreacion}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, FechaCreacion: e.target.value })}
-            />
+              {/* Columna 2 */}
+              <div className="formulario-item">
+                <label>Plazo (meses):</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={financiamientoForm.Plazo}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Plazo: parseInt(e.target.value) || 0 })}
+                />
 
-            <label>Plazo (meses):</label>
-            <input
-              type="number"
-              className="form-control"
-              value={financiamientoForm.Plazo}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Plazo: parseInt(e.target.value) || 0 })}
-            />
+                <label className="mt-2">Interés (%):</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={financiamientoForm.InteresPorcentaje}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, InteresPorcentaje: parseFloat(e.target.value) || 0 })}
+                />
 
-            <label>Interés (%):</label>
-            <input
-              type="number"
-              className="form-control"
-              value={financiamientoForm.InteresPorcentaje}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, InteresPorcentaje: parseFloat(e.target.value) || 0 })}
-            />
+                <label className="mt-2">Descripción:</label>
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  value={financiamientoForm.Descripcion}
+                  onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Descripcion: e.target.value })}
+                />
+              </div>
+            </div>
 
-            <label>Descripción:</label>
-            <textarea
-              className="form-control"
-              rows={3}
-              value={financiamientoForm.Descripcion}
-              onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Descripcion: e.target.value })}
-            />
-
+            {/* Botones */}
             <div className="text-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowFinanciamientoModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarFinanciamiento}>Guardar</button>
@@ -1396,6 +1436,79 @@ export const Dashboard = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {showVerFinanciamientos && (
+        <div className="modal-overlay" onClick={() => setShowVerFinanciamientos(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Lista de Financiamientos</h3>
+            <table className="table table-bordered table-hover table-striped mt-2">
+              <thead className="table-dark">
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Producto</th>
+                  <th>Monto</th>
+                  <th>Plazo</th>
+                  <th>Interés</th>
+                  <th>Descripción</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaFinanciamientos.length > 0 ? (
+                  listaFinanciamientos.map((f, i) => (
+                    <tr key={i}>
+                      <td>{f.CedulaID}</td>
+                      <td>{f.Nombre}</td>
+                      <td>{f.Producto}</td>
+                      <td>₡{f.Monto.toLocaleString()}</td>
+                      <td>{f.Plazo} meses</td>
+                      <td>{f.InteresPorcentaje}%</td>
+                      <td>{f.Descripcion}</td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-warning me-1"
+                          onClick={() => {
+                            setFinanciamientoForm(f);
+                            setIdFinanciamientoEditando(f.ID);
+                            setModoEditarFinanciamiento(true);
+                            setShowFinanciamientoModal(true);
+                            setShowVerFinanciamientos(false);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={async () => {
+                            if (window.confirm("¿Seguro que deseas eliminar este financiamiento?")) {
+                              try {
+                                await fetch(`http://localhost:3001/api/financiamientos/${f.ID}`, {
+                                  method: "DELETE"
+                                });
+                                verListaFinanciamientos(); // refresca lista
+                              } catch (err) {
+                                console.error("Error al eliminar:", err);
+                              }
+                            }
+                          }}
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan="8" className="text-center text-muted">No hay financiamientos registrados.</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowVerFinanciamientos(false)}>Cerrar</button>
+            </div>
           </div>
         </div>
       )}
@@ -1478,7 +1591,8 @@ export const Dashboard = () => {
             <button className="btn btn-secondary mt-3" onClick={() => setShowComingSoon(false)}>Cerrar</button>
           </div>
         </div>
-      )}
+      )}    
     </div>
+    
   );
 };
