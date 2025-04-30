@@ -31,6 +31,14 @@ export const Dashboard = () => {
   const [showVerFinanciamientos, setShowVerFinanciamientos] = useState(false);
   const [modoEditarFinanciamiento, setModoEditarFinanciamiento] = useState(false);
   const [idFinanciamientoEditando, setIdFinanciamientoEditando] = useState(null);
+  const [showEditarVacacionModal, setShowEditarVacacionModal] = useState(false);
+  const [vacacionEditando, setVacacionEditando] = useState(null);
+  const [showAbonosModal, setShowAbonosModal] = useState(false);
+  const [listaAbonos, setListaAbonos] = useState([]);
+  const [showListaColaboradoresAguinaldo, setShowListaColaboradoresAguinaldo] = useState(false);
+  const [aguinaldoCalculado, setAguinaldoCalculado] = useState(0);
+  const [pagosDelAguinaldo, setPagosDelAguinaldo] = useState([]);
+  const [showAguinaldoModal, setShowAguinaldoModal] = useState(false);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -193,7 +201,8 @@ export const Dashboard = () => {
     { id: "planilla", title: "PLANILLA", img: "/images/aglutinante.png" },
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
     { id: "vales", title: "VALES", img: "/images/disponible.png" },
-    { id: "disponible2", title: "DISPONIBLE", img: "/images/disponible.png" }
+    { id: "aguinaldo", title: "AGUINALDO", img: "/images/disponible.png" },
+    // { id: "disponible3", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
   const filteredColaboradores = colaboradores.filter(colaborador =>
@@ -236,6 +245,54 @@ export const Dashboard = () => {
       console.error("Error al obtener la lista de financiamientos:", error);
     }
   };
+
+  const verAbonos = async (financiamientoID) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/abonos/${financiamientoID}`);
+      const data = await response.json();
+      setListaAbonos(data);
+      setShowAbonosModal(true);
+    } catch (error) {
+      console.error("Error al obtener abonos:", error);
+    }
+  };
+
+  const guardarPagoFinanciamiento = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/pagos-financiamiento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          FinanciamientoID: financiamientoSeleccionado.ID,
+          FechaPago: pagoForm.FechaPago,
+          MontoAplicado: pagoForm.MontoAplicado,
+          Observaciones: pagoForm.Observaciones
+        })
+      });
+      const data = await response.json();
+      alert(data.message || "Pago aplicado correctamente");
+      setShowAplicarPagoModal(false);
+      setShowVerFinanciamientos(false);
+      setPagoFinanciamientoForm({
+        IDFinanciamiento: null,
+        Fecha: new Date().toISOString().slice(0, 10),
+        MontoAplicado: 0,
+        Observaciones: ""
+      });
+      verListaFinanciamientos(); // refrescar la tabla
+    } catch (error) {
+      console.error("Error aplicando pago:", error);
+    }
+  };
+
+  const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
+  const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
+  const [pagoFinanciamientoForm, setPagoFinanciamientoForm] = useState({
+    IDFinanciamiento: null,
+    Fecha: new Date().toISOString().slice(0, 10),
+    MontoAplicado: 0,
+    Observaciones: ""
+  });
 
   const handleChange = (e) => {
     setColaboradorData({ ...colaboradorData, [e.target.name]: e.target.value });
@@ -298,6 +355,30 @@ export const Dashboard = () => {
       }
     } else {
       setShowComingSoon(true);
+    }
+  };
+
+  const abrirModalAguinaldo = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const data = await response.json();
+      setColaboradores(data);
+      setShowListaColaboradoresAguinaldo(true);
+    } catch (error) {
+      console.error("Error al obtener colaboradores para aguinaldo:", error);
+    }
+  };
+
+  const calcularAguinaldo = async (colaborador) => {
+    setSelectedColaborador(colaborador);
+    try {
+      const res = await fetch(`http://localhost:3001/api/aguinaldo/${colaborador.CedulaID}`);
+      const data = await res.json();
+      setAguinaldoCalculado(data.aguinaldo);
+      setPagosDelAguinaldo(data.pagos);
+      setShowAguinaldoModal(true);
+    } catch (err) {
+      console.error("Error al calcular aguinaldo:", err);
     }
   };
 
@@ -438,6 +519,14 @@ export const Dashboard = () => {
       const response = await fetch("http://localhost:3001/api/colaboradores");
       const data = await response.json();
       setColaboradores(data);
+
+      setModoEditarFinanciamiento(false); // 👈 FORZAMOS modo creación
+      setFinanciamientoForm({
+        CedulaID: "", Nombre: "", Producto: "", Monto: 0,
+        FechaCreacion: new Date().toISOString().slice(0, 10),
+        Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
+      }); // 👈 Reseteamos el formulario
+
       setShowFinanciamientoModal(true);
     } catch (error) {
       console.error("Error al cargar colaboradores:", error);
@@ -780,7 +869,10 @@ export const Dashboard = () => {
                     }
                   } else if (card.id === "planilla") {
                     handlePlanillaModal();
-                  } else {
+                  } else if (card.id === "aguinaldo") {
+                    abrirModalAguinaldo();
+                  }
+                  else {
                     setActiveCard(card.id);
                     setViewMode(false);
                   }
@@ -1126,6 +1218,7 @@ export const Dashboard = () => {
                   <th>Fecha Entrada</th>
                   <th>Días Tomados</th>
                   <th>Detalle</th>
+
                 </tr>
               </thead>
               <tbody>
@@ -1134,7 +1227,19 @@ export const Dashboard = () => {
                     <td>{v.FechaSalida?.slice(0, 10)}</td>
                     <td>{v.FechaEntrada?.slice(0, 10)}</td>
                     <td>{v.DiasTomados}</td>
-                    <td>{v.Detalle || 'Sin detalle'}</td>
+                    <td style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {v.Detalle || 'Sin detalle'}
+                      <button
+                        className="btn btn-sm btn-warning ms-2"
+                        onClick={() => {
+                          setVacacionEditando({ ...v, ID: v.ID }); // Asegúrate que tenga el ID
+                          setShowEditarVacacionModal(true);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
+
                   </tr>
                 )) : (
                   <tr><td colSpan="4" className="text-center text-muted">Sin registros</td></tr>
@@ -1147,6 +1252,120 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {showListaColaboradoresAguinaldo && (
+        <div className="modal-overlay" onClick={() => setShowListaColaboradoresAguinaldo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Lista de Colaboradores - Aguinaldo</h3>
+            <table className="table table-bordered table-striped">
+              <thead className="table-dark">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cédula</th>
+                  <th>Fecha Ingreso</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {colaboradores.map((colab, index) => (
+                  <tr key={index}>
+                    <td>{colab.Nombre}</td>
+                    <td>{colab.CedulaID}</td>
+                    <td>{colab.FechaIngreso?.slice(0, 10)}</td>
+                    <td>
+                      <button className="btn btn-sm btn-success" onClick={() => calcularAguinaldo(colab)}>
+                        Calcular
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowListaColaboradoresAguinaldo(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditarVacacionModal && vacacionEditando && (
+        <div className="modal-overlay" onClick={() => setShowEditarVacacionModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Editar Vacación</h3>
+
+            <label>Fecha Salida:</label>
+            <input
+              type="date"
+              className="form-control"
+              value={vacacionEditando.FechaSalida?.slice(0, 10)}
+              onChange={(e) => setVacacionEditando({ ...vacacionEditando, FechaSalida: e.target.value })}
+            />
+
+            <label>Fecha Entrada:</label>
+            <input
+              type="date"
+              className="form-control"
+              value={vacacionEditando.FechaEntrada?.slice(0, 10)}
+              onChange={(e) => setVacacionEditando({ ...vacacionEditando, FechaEntrada: e.target.value })}
+            />
+
+            <label>Detalle:</label>
+            <textarea
+              className="form-control"
+              value={vacacionEditando.Detalle || ""}
+              onChange={(e) => setVacacionEditando({ ...vacacionEditando, Detalle: e.target.value })}
+            />
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowEditarVacacionModal(false)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={async () => {
+                  try {
+                    const dias = calcularDiasVacaciones(vacacionEditando.FechaSalida, vacacionEditando.FechaEntrada);
+                    const response = await fetch("http://localhost:3001/api/vacaciones/editar", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ...vacacionEditando, DiasTomados: dias })
+                    });
+                    const result = await response.json();
+                    alert(result.message);
+                    setShowEditarVacacionModal(false);
+                    setShowDetalleModal(false); // Para forzar refresco
+                    verDetalleVacaciones(selectedColaborador?.CedulaID); // Recargar
+                  } catch (error) {
+                    console.error("Error al editar vacaciones:", error);
+                  }
+                }}
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAguinaldoModal && (
+        <div className="modal-overlay" onClick={() => setShowAguinaldoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Aguinaldo de {selectedColaborador?.Nombre}</h3>
+            <p><strong>Total Aguinaldo: ₡{parseFloat(aguinaldoCalculado).toLocaleString()}</strong></p>
+            <table className="table">
+              <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
+              <tbody>
+                {pagosDelAguinaldo.map((pago, i) => (
+                  <tr key={i}>
+                    <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                    <td>₡{pago.TotalPago.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button className="btn btn-secondary mt-3" onClick={() => setShowAguinaldoModal(false)}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
       {/* ********************************************* */}
       {showFinanciamientosModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientosModal(false)}>
@@ -1307,11 +1526,42 @@ export const Dashboard = () => {
             <div className="formulario-grid-2cols">
               {/* Columna 1 */}
               <div className="formulario-item">
-                {modoEditarFinanciamiento && (
-                  <>
-                    <label>Colaborador:</label>
-                    <input type="text" className="form-control" value={financiamientoForm.Nombre} readOnly />
-                  </>
+                {!modoEditarFinanciamiento && (
+                  <div className="formulario-item">
+                    <label>Buscar colaborador (nombre o cédula):</label>
+                    <input
+                      type="text"
+                      className="form-control mb-2"
+                      placeholder="Buscar..."
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+
+                    <select
+                      className="form-select"
+                      onChange={(e) => {
+                        const selected = colaboradores.find(c => c.CedulaID === e.target.value);
+                        if (selected) {
+                          setFinanciamientoForm(prev => ({
+                            ...prev,
+                            CedulaID: selected.CedulaID,
+                            Nombre: `${selected.Nombre} ${selected.Apellidos}`
+                          }));
+                        }
+                      }}
+                    >
+                      <option value="">Seleccione un colaborador</option>
+                      {colaboradores
+                        .filter(c =>
+                          c.Nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                        .map((colaborador, i) => (
+                          <option key={i} value={colaborador.CedulaID}>
+                            {colaborador.Nombre} {colaborador.Apellidos} - {colaborador.CedulaID}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                 )}
 
                 <label>Producto:</label>
@@ -1440,6 +1690,44 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showAplicarPagoModal && financiamientoSeleccionado && (
+        <div className="modal-overlay" onClick={() => setShowAplicarPagoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Aplicar Pago a {financiamientoSeleccionado.Producto}</h3>
+            <p>Monto Pendiente: ₡{(financiamientoSeleccionado?.MontoPendiente ?? 0).toLocaleString()}</p>
+
+            <label>Fecha de Pago:</label>
+            <input
+              type="date"
+              className="form-control"
+              value={pagoForm.FechaPago}
+              onChange={(e) => setPagoForm({ ...pagoForm, FechaPago: e.target.value })}
+            />
+
+            <label>Monto a Aplicar:</label>
+            <input
+              type="number"
+              className="form-control"
+              value={pagoForm.MontoAplicado}
+              onChange={(e) => setPagoForm({ ...pagoForm, MontoAplicado: parseFloat(e.target.value) || 0 })}
+            />
+
+            <label>Observaciones:</label>
+            <textarea
+              className="form-control"
+              rows={2}
+              value={pagoForm.Observaciones}
+              onChange={(e) => setPagoForm({ ...pagoForm, Observaciones: e.target.value })}
+            />
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowAplicarPagoModal(false)}>Cancelar</button>
+              <button className="btn btn-success" onClick={guardarPagoFinanciamiento}>Aplicar Pago</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showVerFinanciamientos && (
         <div className="modal-overlay" onClick={() => setShowVerFinanciamientos(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1451,6 +1739,7 @@ export const Dashboard = () => {
                   <th>Nombre</th>
                   <th>Producto</th>
                   <th>Monto</th>
+                  <th>Pendiente</th>
                   <th>Plazo</th>
                   <th>Interés</th>
                   <th>Descripción</th>
@@ -1465,12 +1754,13 @@ export const Dashboard = () => {
                       <td>{f.Nombre}</td>
                       <td>{f.Producto}</td>
                       <td>₡{f.Monto.toLocaleString()}</td>
+                      <td>₡{f.MontoPendiente?.toLocaleString()}</td>
                       <td>{f.Plazo} meses</td>
                       <td>{f.InteresPorcentaje}%</td>
                       <td>{f.Descripcion}</td>
                       <td>
                         <button
-                          className="btn btn-sm btn-warning me-1"
+                          className="btn btn-sm btn-warning me-1 button-lista-financimientos"
                           onClick={() => {
                             setFinanciamientoForm(f);
                             setIdFinanciamientoEditando(f.ID);
@@ -1482,7 +1772,7 @@ export const Dashboard = () => {
                           Editar
                         </button>
                         <button
-                          className="btn btn-sm btn-danger"
+                          className="btn btn-sm btn-danger button-lista-financimientos"
                           onClick={async () => {
                             if (window.confirm("¿Seguro que deseas eliminar este financiamiento?")) {
                               try {
@@ -1497,6 +1787,22 @@ export const Dashboard = () => {
                           }}
                         >
                           Eliminar
+                        </button>
+                        <button
+                          className="btn btn-sm btn-primary button-lista-financimientos"
+                          onClick={() => {
+                            setFinanciamientoSeleccionado(f); // guardas en estado el financiamiento
+                            setShowVerFinanciamientos(false); // 👈 CIERRA el modal de lista
+                            setShowAplicarPagoModal(true);    // 👈 ABRE el modal de aplicar pago
+                          }}
+                        >
+                          Aplicar Pago
+                        </button>
+                        <button
+                          className="btn btn-sm btn-success me-1 button-lista-financimientos"
+                          onClick={() => verAbonos(f.ID)}
+                        >
+                          Ver Abonos
                         </button>
                       </td>
                     </tr>
@@ -1580,6 +1886,39 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showAbonosModal && (
+        <div className="modal-overlay" onClick={() => setShowAbonosModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Historial de Abonos</h3>
+            <table className="table table-bordered table-hover table-striped mt-2">
+              <thead className="table-dark">
+                <tr>
+                  <th>Fecha</th>
+                  <th>Monto Aplicado</th>
+                  <th>Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaAbonos.length > 0 ? (
+                  listaAbonos.map((abono, i) => (
+                    <tr key={i}>
+                      <td>{abono.FechaPago?.slice(0, 10)}</td>
+                      <td>₡{abono.MontoAplicado.toLocaleString()}</td>
+                      <td>{abono.Observaciones || "—"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan="3" className="text-center text-muted">Sin abonos registrados</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowAbonosModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal "Próximamente" */}
 
       {showComingSoon && (
@@ -1591,8 +1930,8 @@ export const Dashboard = () => {
             <button className="btn btn-secondary mt-3" onClick={() => setShowComingSoon(false)}>Cerrar</button>
           </div>
         </div>
-      )}    
+      )}
     </div>
-    
+
   );
 };

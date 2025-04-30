@@ -137,14 +137,16 @@ code {
 }
 
 .logo_cards_dashboard {
-  width: 72px;
-  height: 72px;
+  width: 39px  !important; 
+  height: 39px  !important;
 }
 
 .div_cards_dasboard {
   align-items: center;
   text-align: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
 }
 
 .h5_cards_dashboard {
@@ -218,7 +220,9 @@ code {
 
 /* NAVBAR SIDEBAR  */
 
-
+.modal-content {
+  background-color: #fff !important;
+}
 
 /* Contenedor principal que respeta el sidebar */
 .app-container {
@@ -399,4 +403,106 @@ code {
 /* Hover opcional */
 .sidebar nav ul li .NavLink:hover {
   background-color: #f2f2f2;
+}
+
+.button-lista-financimientos {
+  padding: 3px;
+  margin: 3px;
+}
+
+.nombre-empresas-cuadros {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  justify-content: center;
+}
+
+.div-cuadros-empresas {
+  background-color: #425f70;
+}
+
+.boton-ver-empresas {
+  margin-top: 6px;
+  background-color: #c4ffcc;
+}
+
+.boton-disponible-horarios  {
+  background-color: rgb(81, 175, 238);
+  color: #000000;
+  max-width: 100px;
+  text-align: center;
+  border-radius: 3%;
+}
+
+.horarios-background-color {
+  background-color: #292929;
+}
+
+.input-label-horarios {
+  color: #000000;
+  background-color: #005092;
+}
+
+.horarios-background-color {
+  background-color: #005092;
+
+}
+
+.input-ver-horarios {
+  display: flex;
+  align-items: center;
+  text-align: center;
+}
+
+.botones-ver-horarios {
+  margin-top: 6px;
+}
+
+.input-horarios-text-empresas {
+  background-color: #3a3a3a;
+}
+
+.organizador-input-agregarempresa {
+  display: flex;
+  justify-content: center;
+}
+
+.organizador-input-agregarempresa-input {
+  margin-right: 6px;
+}
+
+.div-horarios {
+  background-color:#006879;
+}
+
+
+/* ModalAnimado.css */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: white;
+  color: black;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.animate-fadein {
+  animation: fadein 0.3s ease-out;
+}
+
+@keyframes fadein {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
 }

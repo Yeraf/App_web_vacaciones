@@ -209,7 +209,7 @@ app.get('/api/vacaciones/:cedula', async (req, res) => {
     const pool = await sql.connect(dbConfig);
     const result = await pool.request()
       .input("CedulaID", sql.NVarChar, cedula)
-      .query("SELECT FechaSalida, FechaEntrada, DiasTomados, Detalle FROM BoletaVacaciones WHERE CedulaID = @CedulaID ORDER BY FechaSalida DESC");
+      .query("SELECT ID, FechaSalida, FechaEntrada, DiasTomados, Detalle FROM BoletaVacaciones WHERE CedulaID = @CedulaID ORDER BY FechaSalida DESC");
 
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -329,13 +329,13 @@ app.post('/api/financiamientos', async (req, res) => {
       .input('Descripcion', sql.NVarChar(sql.MAX), Descripcion)
       .query(`
         INSERT INTO Financiamientos (
-          CedulaID, Nombre, Producto, Monto, FechaCreacion,
-          Plazo, InteresPorcentaje, Descripcion
-        )
-        VALUES (
-          @CedulaID, @Nombre, @Producto, @Monto, @FechaCreacion,
-          @Plazo, @InteresPorcentaje, @Descripcion
-        )
+  CedulaID, Nombre, Producto, Monto, FechaCreacion,
+  Plazo, InteresPorcentaje, Descripcion, MontoPendiente
+)
+VALUES (
+  @CedulaID, @Nombre, @Producto, @Monto, @FechaCreacion,
+  @Plazo, @InteresPorcentaje, @Descripcion, @Monto
+)
       `);
 
     res.status(201).json({ message: 'Financiamiento guardado correctamente' });
@@ -458,7 +458,7 @@ app.put('/api/financiamientos/:id', async (req, res) => {
           CedulaID = @CedulaID,
           Nombre = @Nombre,
           Producto = @Producto,
-          Monto = @Monto,
+          MontoPendiente = @Monto,
           FechaCreacion = @FechaCreacion,
           Plazo = @Plazo,
           InteresPorcentaje = @InteresPorcentaje,
@@ -472,6 +472,7 @@ app.put('/api/financiamientos/:id', async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar financiamiento' });
   }
 });
+
 
 // PUT - Actualizar financiamiento por ID
 app.put('/api/financiamientos/:id', async (req, res) => {
@@ -548,5 +549,235 @@ app.put('/api/financiamientos/:id', async (req, res) => {
   } catch (error) {
     console.error("Error actualizando financiamiento:", error);
     res.status(500).json({ error: 'Error al actualizar financiamiento' });
+  }
+});
+
+app.put("/api/vacaciones/editar", async (req, res) => {
+  const { ID, FechaSalida, FechaEntrada, Detalle, DiasTomados } = req.body;
+
+  console.log("Datos recibidos para actualizar:", { ID, FechaSalida, FechaEntrada, Detalle, DiasTomados })
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, ID)
+      .input("FechaSalida", sql.Date, FechaSalida)
+      .input("FechaEntrada", sql.Date, FechaEntrada)
+      .input("Detalle", sql.NVarChar(sql.MAX), Detalle)
+      .input("DiasTomados", sql.Int, DiasTomados)
+      .query(`
+        UPDATE BoletaVacaciones
+        SET FechaSalida = @FechaSalida,
+            FechaEntrada = @FechaEntrada,
+            Detalle = @Detalle,
+            DiasTomados = @DiasTomados
+        WHERE ID = @ID
+      `);
+    res.json({ message: "Vacación actualizada correctamente" });
+  } catch (error) {
+    console.error("Error actualizando vacaciones:", error);
+    res.status(500).json({ error: "Error al actualizar vacaciones" });
+  }
+});
+
+
+
+// ...resto de tu Server.js arriba intacto...
+
+app.post("/api/pagos-financiamiento", async (req, res) => {
+  const { FinanciamientoID, FechaPago, MontoAplicado, Observaciones } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1. Insertar el pago
+    await pool.request()
+      .input("FinanciamientoID", sql.Int, FinanciamientoID)
+      .input("FechaPago", sql.Date, FechaPago)
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .input("Observaciones", sql.NVarChar(sql.MAX), Observaciones)
+      .query(`
+        INSERT INTO PagosFinanciamiento (FinanciamientoID, FechaPago, MontoAplicado, Observaciones)
+        VALUES (@FinanciamientoID, @FechaPago, @MontoAplicado, @Observaciones)
+      `);
+
+    // 2. Actualizar el monto pendiente
+    await pool.request()
+      .input("ID", sql.Int, FinanciamientoID)
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .query(`
+        UPDATE Financiamientos
+        SET MontoPendiente = ISNULL(MontoPendiente, 0) - @MontoAplicado
+        WHERE ID = @ID
+      `);
+
+    res.json({ message: "Pago aplicado correctamente" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al aplicar el pago" });
+  }
+});
+
+app.post('/api/financiamientos', async (req, res) => {
+  const {
+    CedulaID, Nombre, Producto, Monto, FechaCreacion,
+    Plazo, InteresPorcentaje, Descripcion
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('Producto', sql.NVarChar, Producto)
+      .input('Monto', sql.Decimal(18, 2), Monto)
+      .input('FechaCreacion', sql.Date, FechaCreacion)
+      .input('Plazo', sql.Int, Plazo)
+      .input('InteresPorcentaje', sql.Decimal(5, 2), InteresPorcentaje || 0)
+      .input('Descripcion', sql.NVarChar(sql.MAX), Descripcion)
+      .input('MontoPendiente', sql.Decimal(18, 2), Monto) // inicializa igual a Monto
+      .query(`
+        INSERT INTO Financiamientos (
+          CedulaID, Nombre, Producto, Monto, FechaCreacion,
+          Plazo, InteresPorcentaje, Descripcion, MontoPendiente
+        )
+        VALUES (
+          @CedulaID, @Nombre, @Producto, @Monto, @FechaCreacion,
+          @Plazo, @InteresPorcentaje, @Descripcion, @MontoPendiente
+        )
+      `);
+
+    res.status(201).json({ message: 'Financiamiento guardado correctamente' });
+  } catch (error) {
+    console.error("Error al guardar financiamiento:", error);
+    res.status(500).json({ error: 'Error al guardar financiamiento' });
+  }
+});
+
+app.get("/api/abonos/:financiamientoId", async (req, res) => {
+  const id = req.params.financiamientoId;
+  try {
+    const result = await sql.query`
+      SELECT FechaPago, MontoAplicado, Observaciones
+      FROM PagosFinanciamiento
+      WHERE FinanciamientoID = ${id}
+      ORDER BY FechaPago DESC
+    `;
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error al obtener abonos:", err);
+    res.status(500).json({ error: "Error al obtener abonos" });
+  }
+});
+
+app.get('/api/aguinaldo/:cedula', async (req, res) => {
+  const { cedula } = req.params;
+  try {
+    await sql.connect(dbConfig);
+    const result = await sql.query`
+      SELECT TotalPago, FechaRegistro 
+      FROM PagoPlanilla 
+      WHERE CedulaID = ${cedula}
+        AND FechaRegistro >= DATEFROMPARTS(YEAR(GETDATE()) - 1, 12, 1)
+        AND FechaRegistro <= DATEFROMPARTS(YEAR(GETDATE()), 11, 30)
+    `;
+
+    const pagos = result.recordset;
+    const total = pagos.reduce((sum, pago) => sum + pago.TotalPago, 0);
+    const aguinaldo = total / 12; // ajustado para quincenal
+
+    res.json({ aguinaldo, pagos });
+  } catch (err) {
+    console.error("Error al calcular aguinaldo:", err);
+    res.status(500).json({ error: "Error al calcular aguinaldo" });
+  }
+});
+
+app.get('/api/aguinaldo/:cedula', async (req, res) => {
+  const { cedula } = req.params;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    const result = await pool.request()
+      .input('CedulaID', sql.VarChar, cedula)
+      .query(`
+        SELECT FechaRegistro, TotalPago
+        FROM PagoPlanilla
+        WHERE CedulaID = @CedulaID AND YEAR(FechaRegistro) = YEAR(GETDATE())
+      `);
+
+    const pagos = result.recordset;
+
+    // Filtrar pagos válidos (excluye vales si se almacenan como parte)
+    const totalAguinaldo = pagos.reduce((sum, pago) => sum + (pago.TotalPago || 0), 0) / 12;
+
+    res.json({
+      aguinaldo: totalAguinaldo.toFixed(2),
+      pagos
+    });
+
+  } catch (error) {
+    console.error("Error al calcular aguinaldo:", error);
+    res.status(500).json({ error: "Error al calcular aguinaldo" });
+  }
+});
+
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
+// API para consultar cédula en Hacienda desde el backend
+app.post('/api/consultar-cedula-hacienda', async (req, res) => {
+  const { cedula } = req.body;
+
+  const clientId = 'TU_CLIENT_ID'; // ← Poner aquí tu ClientID
+  const clientSecret = 'TU_CLIENT_SECRET'; // ← Poner aquí tu ClientSecret
+
+  try {
+    // Paso 1: Obtener el token
+    const formData = new URLSearchParams();
+    formData.append('grant_type', 'client_credentials');
+    formData.append('client_id', clientId);
+    formData.append('client_secret', clientSecret);
+
+    const tokenResponse = await fetch('https://idp.comprobanteselectronicos.go.cr/auth/realms/rut/protocol/openid-connect/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      console.error('Error al obtener token de Hacienda');
+      return res.status(500).json({ error: 'Error obteniendo token' });
+    }
+
+    const tokenData = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+
+    // Paso 2: Consultar contribuyente
+    const consultaResponse = await fetch(`https://api.comprobanteselectronicos.go.cr/recepcion/v1/consultas?identificacion=${cedula}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!consultaResponse.ok) {
+      console.error('Error al consultar cédula:', await consultaResponse.text());
+      return res.status(404).json({ error: 'Cédula no encontrada en Hacienda' });
+    }
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Error al obtener token de Hacienda:', errorText);
+      return res.status(500).json({ error: 'Error obteniendo token', detalle: errorText });
+    }
+
+    const consultaData = await consultaResponse.json();
+    res.json(consultaData);
+
+  } catch (error) {
+    console.error('Error en consulta a Hacienda:', error);
+    res.status(500).json({ error: 'Error en consulta a Hacienda' });
   }
 });

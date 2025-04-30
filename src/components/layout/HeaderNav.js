@@ -29,13 +29,38 @@ export const HeaderNav = () => {
         <nav>
           <ul>
           <li>
-              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/panel">
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/estadisticas">
               <img src='/images/icono.png' className='logo_contacto'></img> PANEL
               </NavLink>
             </li>
             <li>
               <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/dashboard">
-              <img src='/images/productividad.png' className='logo_contacto'></img> ACTIVIDAD
+              <img src='/images/productividad.png' className='logo_contacto'></img> RECURSOS
+              </NavLink>
+            </li>
+            <li>
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/tareas">
+              <img src='/images/lista-de-tareas.png' className='logo_contacto'></img> TAREAS
+              </NavLink>
+            </li>
+            <li>
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/horario">
+              <img src='/images/horas-laborales.png' className='logo_contacto'></img> HORARIO
+              </NavLink>
+            </li>
+            <li>
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/calendario">
+              <img src='/images/calendario.png' className='logo_contacto'></img> AGENDA
+              </NavLink>
+            </li>
+            <li>
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/registro">
+              <img src='/images/buscar.png' className='logo_contacto'></img> BUSCAR
+              </NavLink>
+            </li>
+            <li>
+              <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/panel">
+              <img src='/images/tipo-de-cambio.png' className='logo_contacto'></img> CAMBIO
               </NavLink>
             </li>
             <li>
