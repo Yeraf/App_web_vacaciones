@@ -1,5 +1,5 @@
-import React from 'react';
-import { Routes, Route, BrowserRouter, NavLink } from "react-router-dom";
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, BrowserRouter, useLocation } from "react-router-dom";
 import { Dashboard } from '../Dashboard';
 import { Footer } from '../layout/Footer';
 import { Contacto } from '../Contacto';
@@ -10,36 +10,126 @@ import { Estadisticas } from '../Estadisticas';
 import { Calendario } from '../Calendario';
 import { Registro } from '../Registro';
 import { Horarios } from '../Horarios';
+import { Login } from '../Login';
+import { RutaProtegida } from '../helpers/RutaProtegida';
 
 export const MisRutas = () => {
+  const location = useLocation();
+  const [usuario, setUsuario] = useState(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('usuario');
+    if (stored) {
+      setUsuario(JSON.parse(stored));
+    }
+    // Simula carga
+    setTimeout(() => {
+      setLoading(false);
+    }, 700); // medio segundo
+  }, []);
+
+  const esLogin = location.pathname === "/login";
+  const [loading, setLoading] = useState(true);
+
+  if (loading) {
     return (
+      <div className="loader-container">
+        <div className="loader"></div>
+        <p>Cargando...</p>
+      </div>
+    );
+  }
 
-        <BrowserRouter>
+  return (
+    <>
+      <Routes>
+        {/* Rutas públicas como login SIN layout */}
+        <Route path="/login" element={<Login />} />
+      </Routes>
 
-            <div className="app-container">
-                {/* { HEADER Y NAVEGACIÓN } */}
-                <HeaderNav />
+      {!esLogin && (
+        <>
+          {usuario && <HeaderNav />}
 
-                {/* { CONTENIDO CENTRAL } */}
-                <section className='content_section'>
-                    <Routes>
-                        {/* <Route path='/' element={<Login />} /> */}
-                        <Route path='/' element={<Estadisticas />} />
-                        <Route path='/estadisticas' element={<Estadisticas />} />
-                        <Route path='/dashboard' element={<Dashboard />} />
-                        <Route path='/tareas' element={<Tareas />} />
-                        <Route path='/calendario' element={<Calendario />} />
-                        <Route path='/horario' element={<Horarios />} />
-                        <Route path='/registro' element={<Registro />} />
-                        <Route path='/contacto' element={<Contacto />} />
-                        <Route path='/panel' element={<PanelPrincipal />} />
-                        <Route path='/footer' element={<Footer />} />
-                    </Routes>
-                </section>
+          <div className="app-container animate-fadein">
+            <section className="content_section">
+              <Routes>
+                <Route path="/" element={<RutaProtegida><Estadisticas /></RutaProtegida>} />
+                <Route path="/estadisticas" element={<RutaProtegida><Estadisticas /></RutaProtegida>} />
+                <Route path="/dashboard" element={<RutaProtegida><Dashboard /></RutaProtegida>} />
+                <Route path="/tareas" element={<RutaProtegida><Tareas /></RutaProtegida>} />
+                <Route path="/horario" element={<RutaProtegida><Horarios /></RutaProtegida>} />
+                <Route path="/calendario" element={<RutaProtegida><Calendario /></RutaProtegida>} />
+                <Route path="/registro" element={<RutaProtegida><Registro /></RutaProtegida>} />
+                <Route path="/contacto" element={<RutaProtegida><Contacto /></RutaProtegida>} />
+                <Route path="/panel" element={<RutaProtegida><PanelPrincipal /></RutaProtegida>} />
+                <Route path="/footer" element={<Footer />} />
+              </Routes>
+            </section>
+          </div>
+        </>
+      )}
+      </>
+  );
+};
 
-            </div>
+// import React, { useEffect, useState } from 'react';
+// import { Routes, Route, BrowserRouter, NavLink } from "react-router-dom";
+// import { Dashboard } from '../Dashboard';
+// import { Footer } from '../layout/Footer';
+// import { Contacto } from '../Contacto';
+// import { HeaderNav } from '../layout/HeaderNav';
+// import { PanelPrincipal } from '../PanelPrincipal';
+// import { Tareas } from '../Tareas';
+// import { Estadisticas } from '../Estadisticas';
+// import { Calendario } from '../Calendario';
+// import { Registro } from '../Registro';
+// import { Horarios } from '../Horarios';
+// import { Login } from '../Login';
+// import { RutaProtegida } from '../helpers/RutaProtegida'; // nuevo helper
 
-        </BrowserRouter>
 
-    )
-}
+// export const MisRutas = () => {
+//     const [usuario, setUsuario] = useState(null);
+  
+//     useEffect(() => {
+//       const usuarioGuardado = localStorage.getItem('usuario');
+//       if (usuarioGuardado) {
+//         setUsuario(JSON.parse(usuarioGuardado));
+//       }
+//     }, []);
+
+//     return (
+
+//         <BrowserRouter>
+//   {usuario && <HeaderNav />} {/* Solo se muestra si hay sesión */}
+
+//   <div className="app-container">
+//     <section className="content_section">
+//       <Routes>
+//         <Route path="/login" element={<Login />} />
+
+//         <Route path="/" element={
+//           <RutaProtegida>
+//             <Estadisticas />
+//           </RutaProtegida>
+//         } />
+
+//         {/* Resto de tus rutas protegidas */}
+//         <Route path="/estadisticas" element={<RutaProtegida><Estadisticas /></RutaProtegida>} />
+//         <Route path="/dashboard" element={<RutaProtegida><Dashboard /></RutaProtegida>} />
+//         <Route path="/tareas" element={<RutaProtegida><Tareas /></RutaProtegida>} />
+//         <Route path="/calendario" element={<RutaProtegida><Calendario /></RutaProtegida>} />
+//         <Route path="/panel" element={<RutaProtegida><PanelPrincipal /></RutaProtegida>} />
+//         <Route path="/registro" element={<RutaProtegida><Registro /></RutaProtegida>} />
+//         <Route path="/horario" element={<RutaProtegida><Horarios /></RutaProtegida>} />
+//         <Route path="/contacto" element={<RutaProtegida><Contacto /></RutaProtegida>} />
+//         {/* etc... */}
+//       </Routes>
+//     </section>
+//   </div>
+// </BrowserRouter>
+//   );
+// };
+
+

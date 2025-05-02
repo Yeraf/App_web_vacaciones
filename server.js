@@ -781,3 +781,30 @@ app.post('/api/consultar-cedula-hacienda', async (req, res) => {
     res.status(500).json({ error: 'Error en consulta a Hacienda' });
   }
 });
+
+// Login
+
+app.post('/api/login', async (req, res) => {
+  const { correo, contrasena } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Correo", sql.VarChar, correo)
+      .input("Contrasena", sql.VarChar, contrasena)
+      .query(`
+        SELECT ID, Nombre, Correo
+        FROM Usuarios
+        WHERE Correo = @Correo AND Contrasena = @Contrasena
+      `);
+
+    if (result.recordset.length === 1) {
+      res.json({ success: true, usuario: result.recordset[0] });
+    } else {
+      res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+    }
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});

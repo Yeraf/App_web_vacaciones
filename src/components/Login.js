@@ -1,60 +1,114 @@
+// src/Login.js
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [correo, setCorreo] = useState('');
+  const [contrasena, setContrasena] = useState('');
+  const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Aquí puedes agregar la lógica de autenticación
-    console.log('Email:', email);
-    console.log('Password:', password);
+
+    try {
+      const res = await fetch('http://localhost:3001/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo, contrasena })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+        navigate('/estadisticas');
+      } else {
+        alert('Credenciales incorrectas');
+      }
+    } catch (error) {
+      alert('Error al conectar con el servidor');
+      console.error(error);
+    }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
-      <div className="bg-gray-800 p-8 rounded-2xl shadow-lg w-full max-w-md">
-        <div className="flex flex-col items-center mb-6">
-          <img src="/images/logo.png" alt="Logo" className="w-20 h-20 mb-4" />
-          <h2 className="text-2xl font-bold text-white">Bienvenido</h2>
-          <p className="text-gray-400 text-sm">Inicia sesión en tu cuenta</p>
-        </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-gray-300 text-sm mb-1" htmlFor="email">Correo Electrónico</label>
+    <div>
+      <div className="div-background-fondo" style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f1f1f1',
+        padding: '30px'
+      }}>
+        <div style={{
+          background: 'white',
+          padding: '40px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          width: '100%',
+          maxWidth: '400px',
+          textAlign: 'center'
+        }}>
+          {/* Logo centrado */}
+          <img
+            src="/images/alpaca.png"
+            alt="Logo"
+            className="logo_alpaca"
+            style={{ width: '80px', height: '80px', marginBottom: '10px' }}
+          />
+
+          {/* Nombre debajo del logo */}
+          <h4 className="text-center mb-3" style={{ color: '#004d40' }}>YOKU ADMIN</h4>
+
+          {/* Formulario */}
+          <h3 className="text-center mb-4">Iniciar sesión</h3>
+          <form onSubmit={handleLogin}>
             <input
-              id="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="tucorreo@example.com"
+              className="form-control mb-3"
+              placeholder="Correo"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
               required
             />
-          </div>
-          <div>
-            <label className="block text-gray-300 text-sm mb-1" htmlFor="password">Contraseña</label>
             <input
-              id="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="••••••••"
+              className="form-control mb-4"
+              placeholder="Contraseña"
+              value={contrasena}
+              onChange={(e) => setContrasena(e.target.value)}
               required
             />
-          </div>
-          <button
-            type="submit"
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition duration-300"
-          >
-            Iniciar Sesión
-          </button>
-        </form>
-        <p className="text-center text-gray-400 text-xs mt-6">
-          &copy; 2025 TuEmpresa. Todos los derechos reservados.
-        </p>
+            <button type="submit" className="btn btn-primary w-100">Entrar</button>
+          </form>
+
+          {/* Frase final */}
+          <p style={{ marginTop: '20px', fontSize: '0.9rem', color: '#555' }}>
+            Organiza y gestiona tu negocio de forma simple y efectiva.
+          </p>
+        </div>
       </div>
+      {/* Footer exclusivo para login */}
+      <footer className="login-footer-scroll">
+  <p>
+    Para soporte o consultas al 
+    <a
+      href="https://wa.me/50687261983"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="whatsapp-link"
+    >
+      <img 
+        src="/images/whatsapp.png"
+        alt="WhatsApp"
+        className="whatsapp-icon"
+      />
+      8726-1983
+    </a>
+  </p>
+  <p>Desarrollado por © Yoku Studios, CR 2025</p>
+</footer>
     </div>
   );
 };

@@ -13,7 +13,7 @@ code {
 }
 
 .layout {
-  width: 98%;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -347,7 +347,7 @@ code {
 .logo_contacto {
   width: 24px;
   height: 24px;
-  margin-right: 6px;
+  
   margin-bottom: 3px;
 }
 
@@ -472,9 +472,17 @@ code {
 }
 
 .div-horarios {
-  background-color:#006879;
+  background-color: #6591a6;
 }
 
+.text-title-h3-horarios {
+  color: #000000;
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
+.input-buttom-crear-empresa {
+  display: flex;
+}
 
 /* ModalAnimado.css */
 .modal-overlay {
@@ -498,6 +506,10 @@ code {
   position: relative;
 }
 
+.button-eliminar-empresa {
+  margin-left: 6px;
+}
+
 .animate-fadein {
   animation: fadein 0.3s ease-out;
 }
@@ -506,3 +518,111 @@ code {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+.div-button-agregar-fila {
+  margin-bottom: 15px;
+}
+
+.div-p-titulo-empresas {
+  margin-top: 9px;
+  margin-bottom: 9px;
+}
+
+.button-cerrar-modal {
+  margin-top: 15px;
+}
+
+.div-button-icons {
+  margin-right: 9px;
+}
+
+body.sidebar-closed .content_section {
+  margin-left: 0 !important;
+}
+
+body.sidebar-open .content_section {
+  margin-left: 220px !important;
+}
+
+.loader-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #ffffff;
+}
+
+.loader {
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #00796b;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-fadein {
+  animation: fadein 0.5s ease-in;
+}
+
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+body.sidebar-open .content_section {
+  margin-left: 220px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+body.sidebar-closed .content_section {
+  margin-left: 0 !important;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+.div-background-fondo {
+  background-image: url('/public/images/BlackandWhite.png') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  min-height: 100vh; /* para asegurar altura completa */
+  width: 100% !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.login-footer-scroll {
+  background-color: #1f4168 !important;
+  color: white !important;
+  text-align: center;
+  font-size: 0.9rem;
+  font-family: 'Segoe UI', 'Roboto', sans-serif;
+  padding: 15px 10px;
+  margin-top: 6px;
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.login-footer-scroll a.whatsapp-link {
+  color: white;
+  margin-left: 6px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.whatsapp-icon {
+  width: 30px;
+  height: 30x;
+  margin-right: 6px;
+}
+
+/* #1f4168 */

@@ -76,6 +76,20 @@ export const PanelPrincipal = () => {
     '0', 'C', '=', '+'
   ];
 
+  // Agrega arriba en los estados:
+  const [pagosMensuales, setPagosMensuales] = useState(Array(12).fill(''));
+
+  const handlePagoChange = (index, value) => {
+    const nuevosPagos = [...pagosMensuales];
+    nuevosPagos[index] = value;
+    setPagosMensuales(nuevosPagos);
+  };
+
+  const calcularAguinaldo = () => {
+    const suma = pagosMensuales.reduce((total, pago) => total + parseFloat(pago || 0), 0);
+    return (suma / 12).toFixed(2);
+  };
+
   return (
     <div style={{ padding: '20px' }}>
 
@@ -87,7 +101,7 @@ export const PanelPrincipal = () => {
         marginTop: '30px',
         alignItems: 'center',
         textAlign: 'center',
-        
+
       }}>
         {/* CARD DE TIPO DE CAMBIO */}
         <div style={{
@@ -166,8 +180,67 @@ export const PanelPrincipal = () => {
           )}
         </div>
 
-        {/* CARD CALCULADORA */}
+
         <div style={{
+          background: '#e8f5e9',
+          borderRadius: '10px',
+          padding: '20px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+          maxWidth: '360px',
+          width: '100%',
+          flex: '1'
+        }}>
+          <h4 className="mb-3">Calcular Aguinaldo</h4>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+            {/* Bloque 1 */}
+            <div style={{ flex: 1 }}>
+              {['Diciembre', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo'].map((mes, index) => (
+                <div key={mes} className="mb-2">
+                  <label>{mes}:</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={pagosMensuales[index]}
+                    onChange={(e) => handlePagoChange(index, e.target.value)}
+                    placeholder="₡0.00"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Separador vertical */}
+            <div style={{ width: '1px', backgroundColor: '#ccc', margin: '0 5px' }}></div>
+
+            {/* Bloque 2 */}
+            <div style={{ flex: 1 }}>
+              {['Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre'].map((mes, idx) => (
+                <div key={mes} className="mb-2">
+                  <label>{mes}:</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={pagosMensuales[idx + 6]}
+                    onChange={(e) => handlePagoChange(idx + 6, e.target.value)}
+                    placeholder="₡0.00"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Total al final */}
+          <div className="mt-4 text-center">
+            <strong>Total a pagar:</strong>{' '}
+            <span className="text-success">
+              ₡{parseFloat(calcularAguinaldo()).toLocaleString('es-CR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        
+        {/* CARD CALCULADORA */}
+       <div style={{
           background: '#fefefe',
           borderRadius: '10px',
           padding: '20px',
@@ -198,7 +271,17 @@ export const PanelPrincipal = () => {
             ))}
           </div>
         </div>
+
+       
+
+
+
+        
+
+
       </div>
+
+       
     </div>
   );
 };

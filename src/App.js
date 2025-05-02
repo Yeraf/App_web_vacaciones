@@ -4,7 +4,9 @@ import { MisRutas } from './components/router/MisRutas';
 function App() {
   return (
     <div className='layout'>
+
       <MisRutas />
+      
     </div>
   );
 }

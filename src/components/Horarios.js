@@ -99,8 +99,17 @@ export const Horarios = () => {
   };
 
   return (
-    <div className="p-4 text-white bg-gray-950 min-h-screen">
-      <h2 className="text-center text-xl font-bold mb-4">Organizador de Horarios Semanal</h2>
+    <div className="p-4 text-white bg-gray-950 min-h-screen div-horarios">
+      <h3 className="text-center text-xl font-bold mb-4 text-title-h3-horarios">Organizador de Horarios Semanal</h3>
+<div className='input-buttom-crear-empresa'>
+      <div className="text-center mb-6">
+        <button
+          className="bg-green-700 me-3 hover:bg-green-800 text-black px-3 py-1 rounded text-sm"
+          onClick={agregarEmpresa}
+        >
+          ➕ Agregar Empresa
+        </button>
+      </div>
 
       <div className="text-center mb-4">
         <input
@@ -110,26 +119,19 @@ export const Horarios = () => {
         />
       </div>
 
-      <div className="text-center mb-6">
-        <button
-          className="bg-green-700 hover:bg-green-800 text-white px-3 py-1 rounded text-sm"
-          onClick={agregarEmpresa}
-        >
-          ➕ Agregar Empresa
-        </button>
       </div>
 
       {empresas.map((empresa, idx) => (
         <div key={idx} className="mb-10 border border-gray-600 rounded p-4 bg-gray-800 overflow-x-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold">{empresa.nombre}</h3>
-            <button
+          <div className="flex justify-between items-center mb-4 ">
+            <h3 className="text-lg font-semibold text-black ">{empresa.nombre} <button
               onClick={() => eliminarEmpresa(idx)}
-              className="text-red-400 hover:text-red-600 text-sm"
+              className="text-red-400 hover:text-red-600 text-sm button-eliminar-empresa"
               title="Eliminar empresa"
             >
-              🗑️
-            </button>
+              ❌
+            </button></h3>
+            
           </div>
 
           {[['horarios', 'Tiempos Completos'], ['colaboradoresHoras', 'Colaboradores por Horas']].map(([tipo, titulo]) => {
@@ -137,11 +139,11 @@ export const Horarios = () => {
             const visible = seccionesVisibles[key] ?? true;
             return (
               <div key={tipo} className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-bold">{titulo}</h4>
+                <div className="flex justify-between items-center mb-2 text-black">
+                  <h4 className="text-sm font-bold div-p-titulo-empresas">{titulo}</h4>
                   <button
                     onClick={() => toggleSeccion(idx, tipo)}
-                    className="text-xs bg-gray-600 hover:bg-gray-700 text-white px-2 py-0.5 rounded"
+                    className="text-xs bg-gray-600 hover:bg-gray-700 text-black px-2 py-0.5 rounded"
                   >
                     {visible ? 'Ocultar' : 'Mostrar'}
                   </button>
@@ -151,10 +153,10 @@ export const Horarios = () => {
                     <table className="table-auto text-sm w-full border-collapse border border-gray-700">
                       <thead>
                         <tr>
-                          <th className="border border-gray-600 p-1 bg-gray-700 text-white">Horario</th>
-                          <th className="border border-gray-600 p-1 bg-gray-700 text-white">Personal</th>
+                          <th className="border border-gray-600 p-1 bg-gray-700 text-black">Horario</th>
+                          <th className="border border-gray-600 p-1 bg-gray-700 text-black">Personal</th>
                           {diasSemana.map((dia) => (
-                            <th key={dia} className="border border-gray-600 p-1 bg-gray-700 text-white">{dia}</th>
+                            <th key={dia} className="border border-gray-600 p-1 bg-gray-700 text-black">{dia}</th>
                           ))}
                         </tr>
                       </thead>
@@ -191,7 +193,7 @@ export const Horarios = () => {
                     <div className="text-right mt-2">
                       <button
                         onClick={() => agregarFila(idx, tipo)}
-                        className="text-xs px-3 py-1 bg-blue-700 rounded hover:bg-blue-800"
+                        className="text-xs px-3 py-1 bg-blue-700 rounded hover:bg-blue-800 div-button-agregar-fila"
                       >
                         ➕ Agregar Fila
                       </button>
@@ -216,11 +218,8 @@ export const Horarios = () => {
       {empresaPreview && (
         <div className="modal-overlay">
           <div className="modal-content animate-fadein">
-            <button
-              onClick={() => setEmpresaPreview(null)}
-              className="absolute top-2 right-2 text-sm text-red-600 hover:text-red-800 font-bold"
-            >✕</button>
-            <div ref={printRef} className="mt-6">
+            
+            <div ref={printRef} className="mt-6 text-black">
               <h2 className="text-center text-xl font-bold mb-1">{empresaPreview.empresa.nombre}</h2>
               <p className="text-center mb-4 text-sm font-semibold">{empresaPreview.titulo}</p>
               {[['horarios', 'Tiempos Completos'], ['colaboradoresHoras', 'Colaboradores por Horas']].map(([tipo, titulo]) => (
@@ -252,13 +251,17 @@ export const Horarios = () => {
               ))}
             </div>
             <div className="text-center mt-4 flex justify-center gap-4">
-              <button onClick={imprimirVista} className="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded">
+              <button onClick={imprimirVista} className="bg-green-600 hover:bg-green-700 text-black px-4 py-1 rounded div-button-icons">
                 🖨️ Imprimir
               </button>
-              <button onClick={exportarComoImagen} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded">
+              <button onClick={exportarComoImagen} className="bg-blue-600 hover:bg-blue-700 text-black px-4 py-1 rounded">
                 📸 Exportar Imagen
               </button>
             </div>
+            <button
+              onClick={() => setEmpresaPreview(null)}
+              className="absolute text-sm font-bold btn-danger button-cerrar-modal"
+            >CERRAR</button>
           </div>
         </div>
       )}
