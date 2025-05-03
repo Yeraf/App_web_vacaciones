@@ -90,16 +90,18 @@ code {
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; /* Hace que la app ocupe toda la pantalla */
+  min-height: 100vh;
+  /* Hace que la app ocupe toda la pantalla */
 }
 
 .content_section {
-  flex: 1; /* Empuja el footer hacia abajo */
+  flex: 1;
+  /* Empuja el footer hacia abajo */
 }
 
 .footer {
   width: 100%;
-  background-color: rgb(215, 219, 217);
+  background: linear-gradient(135deg, #d2f0ff, #d2fff3, #fff9f0);
   color: rgb(12, 31, 36);
   min-height: 40px;
   display: flex;
@@ -107,22 +109,28 @@ code {
   justify-content: center;
   text-align: center;
   padding: 10px 0;
-  position: relative; /* o fixed si lo querés pegado abajo siempre */
+  position: relative;
+  /* o fixed si lo querés pegado abajo siempre */
   z-index: 500;
 }
 
 /* Aplica a todo el contenedor principal de la aplicación */
 .app-container {
   display: flex;
-  flex-direction: column; /* Coloca los elementos en columna */
-  min-height: 100vh; /* Ocupa toda la altura de la pantalla */
+  flex-direction: column;
+  /* Coloca los elementos en columna */
+  min-height: 100vh;
+  /* Ocupa toda la altura de la pantalla */
 }
 
 /* Asegura que el contenido principal (Dashboard) crezca y ocupe el espacio disponible */
 .content_section {
-  flex: 1; /* Hace que crezca y ocupe el espacio restante */
+  flex: 1;
+  /* Hace que crezca y ocupe el espacio restante */
   padding: 20px;
-  background-color: rgba(97, 184, 255, 0.15); /* Aqua con 30% de opacidad */
+  background-color: rgba(2, 117, 211, 0.15);
+  /* Aqua con 30% de opacidad */
+  background: linear-gradient(135deg, #fdfbfb, #ebedee, #dbeafe, #e0f2f1, #fef9f8);
   margin-bottom: 9px;
 }
 
@@ -137,8 +145,8 @@ code {
 }
 
 .logo_cards_dashboard {
-  width: 39px  !important; 
-  height: 39px  !important;
+  width: 39px !important;
+  height: 39px !important;
 }
 
 .div_cards_dasboard {
@@ -147,6 +155,14 @@ code {
   justify-content: center;
   width: 30px;
   height: 30px;
+  background: linear-gradient(135deg, #d2f0ff, #d2fff3, #fff9f0);
+}
+
+.div-card-contacto {
+  background: linear-gradient(135deg, #eae8ff, #f6f7fb, #ddeeff);
+  background: linear-gradient(135deg, #d9fdfb, #d0f4ea, #ffffff);
+  background: linear-gradient(135deg, #f8f8f8, #f0f0f5, #ecebff);
+  background: linear-gradient(135deg, #f2e8ff, #fafafa, #e0f7ff);
 }
 
 .h5_cards_dashboard {
@@ -163,11 +179,15 @@ code {
 
 .dashboard_principal {
   display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); /* Ajusta las columnas automáticamente */
-    gap: 20px; /* Espacio entre las cards */
-    padding: 20px;
-    justify-content: center; /* Centrar las tarjetas */
-    align-items: start; /* Evita que crezcan desiguales */
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  /* Ajusta las columnas automáticamente */
+  gap: 20px;
+  /* Espacio entre las cards */
+  padding: 20px;
+  justify-content: center;
+  /* Centrar las tarjetas */
+  align-items: start;
+  /* Evita que crezcan desiguales */
 }
 
 
@@ -197,6 +217,7 @@ code {
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
+
 .formulario-item {
   display: flex;
   flex-direction: column;
@@ -207,6 +228,7 @@ code {
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
+
 .formulario-item {
   display: flex;
   flex-direction: column;
@@ -221,7 +243,8 @@ code {
 /* NAVBAR SIDEBAR  */
 
 .modal-content {
-  background-color: #fff !important;
+  background: linear-gradient(135deg, #f3e5f5, #e3f2fd, #f5f5f5, #e8eaf6, #ffffff) !important;
+  border-radius: 12px !important;
 }
 
 /* Contenedor principal que respeta el sidebar */
@@ -233,13 +256,15 @@ code {
 
 /* SECCIÓN DE CONTENIDO CENTRAL */
 .content_section {
-  margin-top: 60px; /* altura del topbar */
-  margin-left: 220px; /* espacio reservado al sidebar */
+  margin-top: 60px;
+  /* altura del topbar */
+  margin-left: 220px;
+  /* espacio reservado al sidebar */
   padding: 20px;
   transition: margin-left 0.3s ease-in-out;
 }
 
-.sidebar.closed ~ .content_section {
+.sidebar.closed~.content_section {
   margin-left: 0;
 }
 
@@ -250,7 +275,7 @@ code {
   left: 0;
   right: 0;
   height: 60px;
-  background: #051d22;
+  background: linear-gradient(135deg, #000000, #2c003e, #3a0ca3, #4361ee, #000000);
   color: white;
   display: flex;
   justify-content: space-between;
@@ -334,7 +359,8 @@ code {
 .sidebar-blur-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(130, 179, 206, 0.3); /* oscurece un poco */
+  background: rgba(130, 179, 206, 0.3);
+  /* oscurece un poco */
   backdrop-filter: blur(0px);
   z-index: 1;
 }
@@ -347,7 +373,7 @@ code {
 .logo_contacto {
   width: 24px;
   height: 24px;
-  
+
   margin-bottom: 3px;
 }
 
@@ -362,9 +388,11 @@ code {
   border-radius: 12px;
   background-color: white;
 }
+
 .login-container input {
   padding: 10px;
 }
+
 .login-container button {
   padding: 10px;
   background-color: teal;
@@ -372,18 +400,6 @@ code {
   border: none;
   cursor: pointer;
 }
-
-/* .footer {
-  transition: margin-left 0.3s ease;
-}
-
-.footer.sidebar-open {
-  margin-left: 220px;
-}
-
-.footer.sidebar-closed {
-  margin-left: 0;
-} */
 
 .sidebar nav ul li .NavLink {
   display: flex;
@@ -396,7 +412,8 @@ code {
 
 /* Fondo gris cálido cuando está activo */
 .sidebar nav ul li .NavLink.active {
-  background-color: #e4e4e4; /* gris cálido */
+  background-color: #e4e4e4;
+  /* gris cálido */
   color: #000000;
 }
 
@@ -426,7 +443,7 @@ code {
   background-color: #c4ffcc;
 }
 
-.boton-disponible-horarios  {
+.boton-disponible-horarios {
   background-color: rgb(81, 175, 238);
   color: #000000;
   max-width: 100px;
@@ -472,11 +489,12 @@ code {
 }
 
 .div-horarios {
-  background-color: #6591a6;
+  background: linear-gradient(20deg, #000000, #2c003e, #3a0ca3, #4361ee, #000000);
+  background: linear-gradient(120deg, #0f0c29, #302b63, #24243e);
 }
 
 .text-title-h3-horarios {
-  color: #000000;
+  color: #ffffff;
   font-family: Georgia, 'Times New Roman', Times, serif;
 }
 
@@ -515,8 +533,15 @@ code {
 }
 
 @keyframes fadein {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .div-button-agregar-fila {
@@ -564,8 +589,13 @@ body.sidebar-open .content_section {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-fadein {
@@ -573,8 +603,15 @@ body.sidebar-open .content_section {
 }
 
 @keyframes fadein {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 body.sidebar-open .content_section {
@@ -592,7 +629,8 @@ body.sidebar-closed .content_section {
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
-  min-height: 100vh; /* para asegurar altura completa */
+  min-height: 100vh;
+  /* para asegurar altura completa */
   width: 100% !important;
   display: flex;
   justify-content: center;
@@ -623,6 +661,23 @@ body.sidebar-closed .content_section {
   width: 30px;
   height: 30x;
   margin-right: 6px;
+}
+
+.li-localidad-div {
+  color: #ffff;
+  font: 16px system-ui;
+  margin-left: 33px;
+  font-size: 18px;
+}
+
+.logo_contacto-localidad {
+  margin-right: 6px;
+}
+
+.span-text-empresa:hover {
+  color: #00208a !important;
+  font-family: bold;
+  
 }
 
 /* #1f4168 */

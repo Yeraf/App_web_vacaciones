@@ -105,7 +105,7 @@ export const PanelPrincipal = () => {
       }}>
         {/* CARD DE TIPO DE CAMBIO */}
         <div style={{
-          background: '#f1f1f1',
+          background: 'linear-gradient(135deg, #fdfbfb, #ebedee, #dbeafe, #e0f2f1, #fef9f8)',
           borderRadius: '10px',
           padding: '20px',
           boxShadow: '0 4px 8px rgba(0,0,0,0.1)',

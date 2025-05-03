@@ -93,17 +93,20 @@ export const Login = () => {
       <footer className="login-footer-scroll">
   <p>
     Para soporte o consultas al 
+    
+    <img 
+        src="/images/whatsapp.png"
+        alt="WhatsApp"
+        className="whatsapp-icon"
+      />
+    
     <a
       href="https://wa.me/50687261983"
       target="_blank"
       rel="noopener noreferrer"
       className="whatsapp-link"
     >
-      <img 
-        src="/images/whatsapp.png"
-        alt="WhatsApp"
-        className="whatsapp-icon"
-      />
+      
       8726-1983
     </a>
   </p>

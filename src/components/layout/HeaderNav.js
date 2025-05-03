@@ -6,6 +6,8 @@ export const HeaderNav = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
+  const [open, setOpen] = useState(false);
+
   // const toggleSidebar = () => {
   //   setSidebarOpen(!sidebarOpen);
   // };
@@ -17,11 +19,11 @@ export const HeaderNav = () => {
       document.body.classList.remove('sidebar-closed');
     };
   }, []);
-  
+
   const toggleSidebar = () => {
     const nuevoEstado = !sidebarOpen;
     setSidebarOpen(nuevoEstado);
-  
+
     // Ajusta clase del body para controlar el margen del contenido
     if (nuevoEstado) {
       document.body.classList.add('sidebar-open');
@@ -101,11 +103,44 @@ export const HeaderNav = () => {
                   <img src='/images/tipo-de-cambio.png' className='logo_contacto' alt="" /> CALCULAR
                 </NavLink>
               </li>
+
+
+              <li className="nav-item">
+                <div
+                  className="NavLink nav-link d-flex align-items-center justify-content-between"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#collapseAcciones"
+                  aria-expanded="false"
+                  aria-controls="collapseAcciones"
+                  role="button"
+                >
+                  <div className="d-flex align-items-center">
+                    <img src="/images/auriculares.png" className="logo_contacto me-2" alt="" />
+                    <span className='text-white bold span-text-empresa'>EMPRESA</span>
+                  </div>
+                  <i className="bi bi-chevron-down"></i> {/* Puedes usar otro ícono si quieres */}
+                </div>
+
+                <div id="collapseAcciones" className="collapse">
+                  <div className=" py-2 collapse-inner rounded">
+                    <NavLink
+                      className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`}
+                      to="/localidad"
+                    >
+                      Localidad
+                    </NavLink>
+                  </div>
+                </div>
+              </li>
+
+
+
               <li>
                 <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/contacto">
                   <img src='/images/auriculares.png' className='logo_contacto' alt="" /> CONTACTO
                 </NavLink>
               </li>
+
             </ul>
           </nav>
         </div>

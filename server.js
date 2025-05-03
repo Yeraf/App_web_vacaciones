@@ -723,7 +723,7 @@ app.get('/api/aguinaldo/:cedula', async (req, res) => {
   }
 });
 
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 // API para consultar cédula en Hacienda desde el backend
 app.post('/api/consultar-cedula-hacienda', async (req, res) => {
@@ -806,5 +806,59 @@ app.post('/api/login', async (req, res) => {
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Insertar Localidad 
+
+// En tu archivo routes o backend
+app.post('/api/localidades', async (req, res) => {
+  const {
+    Empresa, Alias, TipoCedula, NumeroCedula, RazonSocial, Correo,
+    Dirreccion, Telefono, Provincia, Canton, Distrito,
+    Regimen, PieDocumento, PieProforma, LimiteFact, MontoLicencia,
+    Cuenta1, Cuenta2, Banco2, Sinpe, Logo
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('Empresa', sql.NVarChar, Empresa || '')
+      .input('Alias', sql.NVarChar, Alias || '')
+      .input('TipoCedula', sql.NVarChar, TipoCedula || '')
+      .input('NumeroCedula', sql.NVarChar, NumeroCedula)
+      .input('RazonSocial', sql.NVarChar, RazonSocial || '')
+      .input('Correo', sql.NVarChar, Correo || '')
+      .input('Dirreccion', sql.NVarChar, Dirreccion || '')
+      .input('Telefono', sql.NVarChar, Telefono || '')
+      .input('Provincia', sql.NVarChar, Provincia || '')
+      .input('Canton', sql.NVarChar, Canton || '')
+      .input('Distrito', sql.NVarChar, Distrito || '')
+      .input('Regimen', sql.NVarChar, Regimen || '')
+      .input('PieDocumento', sql.NVarChar(sql.MAX), PieDocumento || '')
+      .input('PieProforma', sql.NVarChar(sql.MAX), PieProforma || '')
+      .input('LimiteFact', sql.Decimal(18, 2), parseFloat(LimiteFact) || 0)
+      .input('MontoLicencia', sql.Decimal(18, 2), parseFloat(MontoLicencia) || 0)
+      .input('Cuenta1', sql.NVarChar, Cuenta1 || '')
+      .input('Cuenta2', sql.NVarChar, Cuenta2 || '')
+      .input('Banco2', sql.NVarChar, Banco2 || '')
+      .input('Sinpe', sql.NVarChar, Sinpe || '')
+      .input('Logo', sql.NVarChar(sql.MAX), Logo || '')
+      .query(`
+        INSERT INTO Localidades (
+  Empresa, Alias, TipoCedula, NumeroCedula, RazonSocial, Correo, Dirreccion, Telefono,
+  Provincia, Canton, Distrito, Regimen, PieDocumento, PieProforma,
+  LimiteFact, MontoLicencia, Cuenta1, Cuenta2, Banco2, Sinpe, Logo
+) VALUES (
+  @Empresa, @Alias, @TipoCedula, @NumeroCedula, @RazonSocial, @Correo, @Dirreccion, @Telefono,
+  @Provincia, @Canton, @Distrito, @Regimen, @PieDocumento, @PieProforma,
+  @LimiteFact, @MontoLicencia, @Cuenta1, @Cuenta2, @Banco2, @Sinpe, @Logo
+)
+      `);
+
+    res.status(200).json({ message: 'Localidad guardada correctamente' });
+  } catch (err) {
+    console.error("Error al guardar localidad:", err);
+    res.status(500).json({ error: "Error al guardar localidad" });
   }
 });

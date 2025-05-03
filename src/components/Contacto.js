@@ -3,8 +3,8 @@ import { Footer } from './layout/Footer';
 
 export const Contacto = () => {
   return (
-    <div className="d-flex flex-column align-items-center justify-content-center" style={{ minHeight: '90vh', padding: '20px', backgroundColor: '#f7f9fc' }}>
-      <div className="card shadow p-4" style={{ maxWidth: '400px', width: '100%', borderRadius: '15px' }}>
+    <div className="d-flex flex-column align-items-center justify-content-center" style={{ minHeight: '90vh', padding: '20px' }}>
+      <div className="card shadow p-4 div-card-contacto" style={{ maxWidth: '400px', width: '100%', borderRadius: '15px' }}>
         <div className="text-center mb-4">
           <img src="/images/alpaca.png" className='logo-contacto'></img>
           <h2 className="fw-bold">Yoku Studios</h2>

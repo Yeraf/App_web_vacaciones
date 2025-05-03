@@ -124,7 +124,7 @@ export const Horarios = () => {
       {empresas.map((empresa, idx) => (
         <div key={idx} className="mb-10 border border-gray-600 rounded p-4 bg-gray-800 overflow-x-auto">
           <div className="flex justify-between items-center mb-4 ">
-            <h3 className="text-lg font-semibold text-black ">{empresa.nombre} <button
+            <h3 className="text-lg font-semibold text-white ">{empresa.nombre} <button
               onClick={() => eliminarEmpresa(idx)}
               className="text-red-400 hover:text-red-600 text-sm button-eliminar-empresa"
               title="Eliminar empresa"
@@ -139,7 +139,7 @@ export const Horarios = () => {
             const visible = seccionesVisibles[key] ?? true;
             return (
               <div key={tipo} className="mb-6">
-                <div className="flex justify-between items-center mb-2 text-black">
+                <div className="flex justify-between items-center mb-2 text-white">
                   <h4 className="text-sm font-bold div-p-titulo-empresas">{titulo}</h4>
                   <button
                     onClick={() => toggleSeccion(idx, tipo)}
@@ -153,10 +153,10 @@ export const Horarios = () => {
                     <table className="table-auto text-sm w-full border-collapse border border-gray-700">
                       <thead>
                         <tr>
-                          <th className="border border-gray-600 p-1 bg-gray-700 text-black">Horario</th>
-                          <th className="border border-gray-600 p-1 bg-gray-700 text-black">Personal</th>
+                          <th className="border border-gray-600 p-1 bg-gray-700 text-white">Horario</th>
+                          <th className="border border-gray-600 p-1 bg-gray-700 text-white">Personal</th>
                           {diasSemana.map((dia) => (
-                            <th key={dia} className="border border-gray-600 p-1 bg-gray-700 text-black">{dia}</th>
+                            <th key={dia} className="border border-gray-600 p-1 bg-gray-700 text-white">{dia}</th>
                           ))}
                         </tr>
                       </thead>

@@ -60,7 +60,7 @@ export const Estadisticas = () => {
 
         {/* CARD COLABORADORES */}
         <div style={{
-          background: '#c8c7c1',
+          background: 'linear-gradient(135deg, #fdfbfb, #ebedee, #dbeafe, #e0f2f1, #fef9f8)',
           borderRadius: '10px',
           padding: '20px',
           boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
@@ -78,7 +78,7 @@ export const Estadisticas = () => {
 
         {/* CARD FINANCIAMIENTOS */}
         <div style={{
-          background: '#edede1',
+          background: 'linear-gradient(135deg, #fdfbfb, #ebedee, #dbeafe, #e0f2f1, #fef9f8)',
           borderRadius: '10px',
           padding: '20px',
           boxShadow: '0 4px 8px rgba(0,0,0,0.1)',

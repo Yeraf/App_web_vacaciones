@@ -12,6 +12,7 @@ import { Registro } from '../Registro';
 import { Horarios } from '../Horarios';
 import { Login } from '../Login';
 import { RutaProtegida } from '../helpers/RutaProtegida';
+import { Localidades } from '../Localidades';
 
 export const MisRutas = () => {
   const location = useLocation();
@@ -25,7 +26,7 @@ export const MisRutas = () => {
     // Simula carga
     setTimeout(() => {
       setLoading(false);
-    }, 700); // medio segundo
+    }, 450); // medio segundo
   }, []);
 
   const esLogin = location.pathname === "/login";
@@ -63,6 +64,7 @@ export const MisRutas = () => {
                 <Route path="/registro" element={<RutaProtegida><Registro /></RutaProtegida>} />
                 <Route path="/contacto" element={<RutaProtegida><Contacto /></RutaProtegida>} />
                 <Route path="/panel" element={<RutaProtegida><PanelPrincipal /></RutaProtegida>} />
+                <Route path="/localidad" element={<RutaProtegida><Localidades /></RutaProtegida>} />
                 <Route path="/footer" element={<Footer />} />
               </Routes>
             </section>
