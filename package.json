@@ -12,6 +12,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.10.3",
     "mssql": "^11.0.1",
     "node-fetch": "^3.3.2",
     "react": "^19.0.0",

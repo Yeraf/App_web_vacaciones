@@ -1,33 +1,89 @@
 // src/Login.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+// import { useEffect } from 'react'; // Asegúrate de tener esta línea al inicio del archivo
+
 
 export const Login = () => {
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const navigate = useNavigate();
 
+
+  const [isJumping, setIsJumping] = useState(false);
+  const starsRef = React.useRef(null);
+
+  const handleJump = () => {
+  setIsJumping(true);
+  setTimeout(() => setIsJumping(false), 600); // Reset salto
+  
+
+for (let i = 0; i < 10; i++) {
+  const star = document.createElement("div");
+   star.className = "star";
+    star.style.left = `${Math.random() * 80 + 10}px`;
+     starsRef.current.appendChild(star);
+   setTimeout(() => star.remove(), 1000); // Eliminar después de animar
+ }
+ };
+
+
+  // Mover hormiga 
+  // useEffect(() => {
+  //   const ant = document.getElementById("ant");
+
+  //   const moveAnt = () => {
+  //     if (!ant) return;
+
+  //     const x = Math.random() * window.innerWidth;
+  //     const y = Math.random() * window.innerHeight;
+
+  //     ant.style.transform = `translate(${x}px, ${y}px) rotate(${Math.random() * 360}deg)`;
+  //   };
+
+  //   const interval = setInterval(() => {
+  //     // Mostrar u ocultar la hormiga aleatoriamente
+  //     const visible = Math.random() > 0.5;
+  //     if (visible) {
+  //       ant.style.opacity = 1;
+  //       moveAnt();
+  //     } else {
+  //       ant.style.opacity = 0;
+  //     }
+  //   }, 4000); // cada 4s
+
+  //   return () => clearInterval(interval);
+  // }, []);
+
+  // Aquí hacemos el Login
+
   const handleLogin = async (e) => {
     e.preventDefault();
 
     try {
-      const res = await fetch('http://localhost:3001/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ correo, contrasena })
+      const res = await fetch("http://localhost:3001/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo, contrasena }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        localStorage.setItem('usuario', JSON.stringify(data.usuario));
-        navigate('/estadisticas');
+        const usuario = data.usuario;
+
+        // Guardamos los datos importantes en localStorage
+        localStorage.setItem("usuario", JSON.stringify(usuario));
+        localStorage.setItem("localidad", usuario.Localidad); // ⬅️ ESTA es la línea que necesita
+
+        // Redireccionamos al Dashboard
+        navigate("/dashboard");
       } else {
-        alert('Credenciales incorrectas');
+        alert(data.message || "Credenciales inválidas");
       }
     } catch (error) {
-      alert('Error al conectar con el servidor');
-      console.error(error);
+      console.error("Error al iniciar sesión:", error);
+      alert("Error al iniciar sesión");
     }
   };
 
@@ -54,9 +110,10 @@ export const Login = () => {
           <img
             src="/images/alpaca.png"
             alt="Logo"
-            className="logo_alpaca"
-            style={{ width: '80px', height: '80px', marginBottom: '10px' }}
+            className={`logo_alpaca ${isJumping ? 'jump' : ''}`}
+            onClick={handleJump}
           />
+          <div className="stars-container" ref={starsRef}></div>
 
           {/* Nombre debajo del logo */}
           <h4 className="text-center mb-3" style={{ color: '#004d40' }}>YOKU ADMIN</h4>
@@ -89,29 +146,34 @@ export const Login = () => {
           </p>
         </div>
       </div>
+
+      {/* <div className="ant-container">
+        <img src="/images/hormiga-voladora.png" alt="Hormiga" className="ant" id="ant" />
+      </div> */}
+
       {/* Footer exclusivo para login */}
       <footer className="login-footer-scroll">
-  <p>
-    Para soporte o consultas al 
-    
-    <img 
-        src="/images/whatsapp.png"
-        alt="WhatsApp"
-        className="whatsapp-icon"
-      />
-    
-    <a
-      href="https://wa.me/50687261983"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="whatsapp-link"
-    >
-      
-      8726-1983
-    </a>
-  </p>
-  <p>Desarrollado por © Yoku Studios, CR 2025</p>
-</footer>
+        <p>
+          Para soporte o consultas al
+
+          <img
+            src="/images/whatsapp.png"
+            alt="WhatsApp"
+            className="whatsapp-icon"
+          />
+
+          <a
+            href="https://wa.me/50687261983"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="whatsapp-link"
+          >
+
+            8726-1983
+          </a>
+        </p>
+        <p>Desarrollado por © Yoku Studios, CR 2025</p>
+      </footer>
     </div>
   );
 };

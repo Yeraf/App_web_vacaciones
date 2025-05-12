@@ -82,18 +82,44 @@ app.post('/api/colaboradores', async (req, res) => {
   }
 });
 
-// GET - Obtener todos los colaboradores
+
 app.get('/api/colaboradores', async (req, res) => {
+  const { localidad } = req.query; // viene de frontend
   try {
     const pool = await sql.connect(dbConfig);
-    const result = await pool.request().query(
-      `SELECT ID, Nombre, Apellidos, CedulaID, Telefono, Direccion, Contrasena, Correo, FechaIngreso, Empresa,Foto, IDColaborador, Contrato, Cuenta, SalarioBase FROM Colaboradores`
-    );
+    let result;
+
+    if (localidad) {
+      result = await pool.request()
+        .input("Localidad", sql.VarChar, localidad)
+        .query(`
+          SELECT *
+          FROM Colaboradores
+          WHERE Empresa = @Localidad
+        `);
+    } else {
+      result = await pool.request().query("SELECT * FROM Colaboradores");
+    }
+
     res.status(200).json(result.recordset);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// GET - Obtener todos los colaboradores / Trea colaboradores funcional
+// app.get('/api/colaboradores', async (req, res) => {
+//   try {
+//     const pool = await sql.connect(dbConfig);
+//     const result = await pool.request().query(
+//       `SELECT ID, Nombre, Apellidos, CedulaID, Telefono, Direccion, Contrasena, Correo, FechaIngreso, Empresa,Foto, IDColaborador, Contrato, Cuenta, SalarioBase FROM Colaboradores`
+//     );
+//     res.status(200).json(result.recordset);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
@@ -220,25 +246,35 @@ app.get('/api/vacaciones/:cedula', async (req, res) => {
 
 app.post("/api/pago-planilla", async (req, res) => {
   const {
-    CedulaID, Nombre, FechaIngreso, Contrato, Cuenta, SalarioBase, TipoPago,
-    HorasTrabajadas, HorasExtra, Comisiones, Viaticos, CCSS, Prestamos, Vales, Adelantos, Ahorro, TotalPago
+    CedulaID, Nombre, FechaIngreso,
+    Contrato, Cuenta, SalarioBase, TipoPago,
+    HorasTrabajadas, HorasExtra, Comisiones, Viaticos,
+    CCSS, Prestamos, Vales, Adelantos, Ahorro,
+    TotalPago, Localidad // <-- nuevo campo
   } = req.body;
 
   try {
+    await sql.connect(dbConfig);
     await sql.query`
-        INSERT INTO PagoPlanilla (
-          CedulaID, Nombre, FechaIngreso, Contrato, Cuenta, SalarioBase, TipoPago,
-          HorasTrabajadas, HorasExtra, Comisiones, Viaticos, CCSS, Prestamos, Vales, Adelantos, Ahorro, TotalPago
-        )
-        VALUES (
-          ${CedulaID}, ${Nombre}, ${FechaIngreso}, ${Contrato}, ${Cuenta}, ${SalarioBase}, ${TipoPago},
-          ${HorasTrabajadas}, ${HorasExtra}, ${Comisiones}, ${Viaticos}, ${CCSS}, ${Prestamos}, ${Vales}, ${Adelantos}, ${Ahorro}, ${TotalPago}
-        )
-      `;
-    res.json({ message: "Pago registrado exitosamente." });
+      INSERT INTO PagoPlanilla (
+        CedulaID, Nombre, FechaIngreso,
+        Contrato, Cuenta, SalarioBase, TipoPago,
+        HorasTrabajadas, HorasExtra, Comisiones, Viaticos,
+        CCSS, Prestamos, Vales, Adelantos, Ahorro,
+        TotalPago, FechaRegistro, Localidad
+      )
+      VALUES (
+        ${CedulaID}, ${Nombre}, ${FechaIngreso},
+        ${Contrato}, ${Cuenta}, ${SalarioBase}, ${TipoPago},
+        ${HorasTrabajadas}, ${HorasExtra}, ${Comisiones}, ${Viaticos},
+        ${CCSS}, ${Prestamos}, ${Vales}, ${Adelantos}, ${Ahorro},
+        ${TotalPago}, GETDATE(), ${Localidad} -- ⬅️ agregado aquí
+      )
+    `;
+    res.json({ message: "Pago registrado correctamente." });
   } catch (err) {
-    console.error("Error al guardar pago:", err);
-    res.status(500).json({ message: "Error al guardar el pago." });
+    console.error("Error al insertar pago:", err);
+    res.status(500).json({ error: "Error al registrar el pago" });
   }
 });
 
@@ -793,7 +829,7 @@ app.post('/api/login', async (req, res) => {
       .input("Correo", sql.VarChar, correo)
       .input("Contrasena", sql.VarChar, contrasena)
       .query(`
-        SELECT ID, Nombre, Correo
+        SELECT ID, Nombre, Correo, Localidad
         FROM Usuarios
         WHERE Correo = @Correo AND Contrasena = @Contrasena
       `);
@@ -860,5 +896,34 @@ app.post('/api/localidades', async (req, res) => {
   } catch (err) {
     console.error("Error al guardar localidad:", err);
     res.status(500).json({ error: "Error al guardar localidad" });
+  }
+});
+
+app.get("/api/reporte-pagos", async (req, res) => {
+  const { inicio, fin, localidad } = req.query;
+
+  // Validación básica
+  if (!inicio || !fin || isNaN(Date.parse(inicio)) || isNaN(Date.parse(fin))) {
+    return res.status(400).json({ error: "Fechas inválidas o faltantes." });
+  }
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Inicio", sql.Date, new Date(inicio))
+      .input("Fin", sql.Date, new Date(fin))
+      .input("Localidad", sql.NVarChar, localidad)
+      .query(`
+        SELECT *
+        FROM PagoPlanilla
+        WHERE Localidad = @Localidad
+          AND CONVERT(date, FechaRegistro) BETWEEN @Inicio AND @Fin
+        ORDER BY FechaRegistro DESC
+      `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("Error en reporte-pagos:", err);
+    res.status(500).json({ error: "Error interno al generar el reporte." });
   }
 });

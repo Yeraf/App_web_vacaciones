@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, BrowserRouter, useLocation } from "react-router-dom";
+import { Routes, Route, BrowserRouter, useLocation, Navigate } from "react-router-dom";
 import { Dashboard } from '../Dashboard';
 import { Footer } from '../layout/Footer';
 import { Contacto } from '../Contacto';
@@ -41,6 +41,10 @@ export const MisRutas = () => {
     );
   }
 
+  if (!usuario && !esLogin) {
+    return <Navigate to="/login" />;
+  }
+
   return (
     <>
       <Routes>
@@ -48,10 +52,9 @@ export const MisRutas = () => {
         <Route path="/login" element={<Login />} />
       </Routes>
 
-      {!esLogin && (
+      {!esLogin && usuario && (
         <>
-          {usuario && <HeaderNav />}
-
+          <HeaderNav />
           <div className="app-container animate-fadein">
             <section className="content_section">
               <Routes>
@@ -71,67 +74,6 @@ export const MisRutas = () => {
           </div>
         </>
       )}
-      </>
+    </>
   );
 };
-
-// import React, { useEffect, useState } from 'react';
-// import { Routes, Route, BrowserRouter, NavLink } from "react-router-dom";
-// import { Dashboard } from '../Dashboard';
-// import { Footer } from '../layout/Footer';
-// import { Contacto } from '../Contacto';
-// import { HeaderNav } from '../layout/HeaderNav';
-// import { PanelPrincipal } from '../PanelPrincipal';
-// import { Tareas } from '../Tareas';
-// import { Estadisticas } from '../Estadisticas';
-// import { Calendario } from '../Calendario';
-// import { Registro } from '../Registro';
-// import { Horarios } from '../Horarios';
-// import { Login } from '../Login';
-// import { RutaProtegida } from '../helpers/RutaProtegida'; // nuevo helper
-
-
-// export const MisRutas = () => {
-//     const [usuario, setUsuario] = useState(null);
-  
-//     useEffect(() => {
-//       const usuarioGuardado = localStorage.getItem('usuario');
-//       if (usuarioGuardado) {
-//         setUsuario(JSON.parse(usuarioGuardado));
-//       }
-//     }, []);
-
-//     return (
-
-//         <BrowserRouter>
-//   {usuario && <HeaderNav />} {/* Solo se muestra si hay sesión */}
-
-//   <div className="app-container">
-//     <section className="content_section">
-//       <Routes>
-//         <Route path="/login" element={<Login />} />
-
-//         <Route path="/" element={
-//           <RutaProtegida>
-//             <Estadisticas />
-//           </RutaProtegida>
-//         } />
-
-//         {/* Resto de tus rutas protegidas */}
-//         <Route path="/estadisticas" element={<RutaProtegida><Estadisticas /></RutaProtegida>} />
-//         <Route path="/dashboard" element={<RutaProtegida><Dashboard /></RutaProtegida>} />
-//         <Route path="/tareas" element={<RutaProtegida><Tareas /></RutaProtegida>} />
-//         <Route path="/calendario" element={<RutaProtegida><Calendario /></RutaProtegida>} />
-//         <Route path="/panel" element={<RutaProtegida><PanelPrincipal /></RutaProtegida>} />
-//         <Route path="/registro" element={<RutaProtegida><Registro /></RutaProtegida>} />
-//         <Route path="/horario" element={<RutaProtegida><Horarios /></RutaProtegida>} />
-//         <Route path="/contacto" element={<RutaProtegida><Contacto /></RutaProtegida>} />
-//         {/* etc... */}
-//       </Routes>
-//     </section>
-//   </div>
-// </BrowserRouter>
-//   );
-// };
-
-

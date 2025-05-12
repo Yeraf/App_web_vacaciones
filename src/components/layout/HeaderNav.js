@@ -115,7 +115,7 @@ export const HeaderNav = () => {
                   role="button"
                 >
                   <div className="d-flex align-items-center">
-                    <img src="/images/auriculares.png" className="logo_contacto me-2" alt="" />
+                    <img src="/images/empresa.png" className="logo_contacto me-2" alt="" />
                     <span className='text-white bold span-text-empresa'>EMPRESA</span>
                   </div>
                   <i className="bi bi-chevron-down"></i> {/* Puedes usar otro ícono si quieres */}

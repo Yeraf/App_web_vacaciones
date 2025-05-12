@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Footer } from "./layout/Footer";
+import html2pdf from "html2pdf.js";
 
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
@@ -39,6 +39,13 @@ export const Dashboard = () => {
   const [aguinaldoCalculado, setAguinaldoCalculado] = useState(0);
   const [pagosDelAguinaldo, setPagosDelAguinaldo] = useState([]);
   const [showAguinaldoModal, setShowAguinaldoModal] = useState(false);
+  const [showReporteTabla, setShowReporteTabla] = useState(false);      // Para el tipo Excel
+  const [showReporteColillas, setShowReporteColillas] = useState(false); // Para las colillas
+  const [fechaInicioReporte, setFechaInicioReporte] = useState("");
+  const [fechaFinReporte, setFechaFinReporte] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
+  const [pagosFiltrados, setPagosFiltrados] = useState([]);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -88,11 +95,12 @@ export const Dashboard = () => {
 
   const handleVacacionesModal = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const localidad = localStorage.getItem("localidad");
+      const response = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
       const data = await response.json();
       setColaboradores(data);
       setCurrentPage(1);
-      await fetchDiasTomados(); // ← Asegura que cargues los días tomados antes de mostrar
+      await fetchDiasTomados(); // aseguramos cargar días antes de mostrar
       setShowVacacionesModal(true);
     } catch (error) {
       console.error("Error al obtener colaboradores:", error);
@@ -200,7 +208,7 @@ export const Dashboard = () => {
     { id: "vacaciones", title: "Vacaciones", img: "/images/vacaciones.png" },
     { id: "planilla", title: "PLANILLA", img: "/images/aglutinante.png" },
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
-    { id: "vales", title: "VALES", img: "/images/disponible.png" },
+    { id: "vales", title: "VALES", img: "/images/mano-con-dolar.png" },
     { id: "aguinaldo", title: "AGUINALDO", img: "/images/disponible.png" },
     // { id: "disponible3", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
@@ -257,6 +265,32 @@ export const Dashboard = () => {
     }
   };
 
+  const generarReportePagos = async () => {
+    try {
+      console.log("Fechas enviadas:", fechaInicio, fechaFin);
+
+      if (!fechaInicio || !fechaFin) {
+        alert("Debe seleccionar ambas fechas.");
+        return;
+      }
+
+      const localidad = localStorage.getItem("localidad");
+      const res = await fetch(`http://localhost:3001/api/reporte-pagos?inicio=${fechaInicio}&fin=${fechaFin}&localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        setPagosFiltrados(data);
+      } else {
+        console.error("Respuesta inesperada:", data);
+        setPagosFiltrados([]);
+        alert("Error al generar el reporte: formato de respuesta inválido");
+      }
+    } catch (err) {
+      console.error("Error al generar reporte:", err);
+      setPagosFiltrados([]);
+      alert("Hubo un error al generar el reporte.");
+    }
+  };
   const guardarPagoFinanciamiento = async () => {
     try {
       const response = await fetch("http://localhost:3001/api/pagos-financiamiento", {
@@ -344,7 +378,9 @@ export const Dashboard = () => {
   const handleView = async (cardId) => {
     if (cardId === "colaboradores") {
       try {
-        const response = await fetch("http://localhost:3001/api/colaboradores");
+        // const response = await fetch("http://localhost:3001/api/colaboradores");
+        const localidad = localStorage.getItem("localidad"); // ⬅️ obtiene la localidad del usuario
+        const response = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
         const data = await response.json();
         setColaboradores(data);
         setCurrentPage(1); // Reinicia la paginación cada vez que hace fetch
@@ -360,7 +396,8 @@ export const Dashboard = () => {
 
   const abrirModalAguinaldo = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const localidad = localStorage.getItem("localidad");
+      const response = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
       const data = await response.json();
       setColaboradores(data);
       setShowListaColaboradoresAguinaldo(true);
@@ -384,7 +421,8 @@ export const Dashboard = () => {
 
   const handlePlanillaModal = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/colaboradores");
+      const localidad = localStorage.getItem("localidad");
+      const response = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
       const data = await response.json();
       setColaboradores(data);
       setCurrentPage(1);
@@ -410,6 +448,14 @@ export const Dashboard = () => {
     }
     return contador;
   }
+
+  const options = {
+    margin: 0.5,
+    filename: `reporte-pagos-${new Date().toISOString().slice(0, 10)}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' } // 👈 AQUÍ
+  };
 
   const handleUpdateColaborador = async () => {
     try {
@@ -445,7 +491,8 @@ export const Dashboard = () => {
   const [pagoForm, setPagoForm] = useState({
     Contrato: "", Cuenta: "", SalarioBase: 0, TipoPago: "Mensual",
     HorasTrabajadas: 0, HorasExtra: 0, Comisiones: 0, Viaticos: 0,
-    CCSS: 0, Prestamos: 0, Vales: 0, Adelantos: 0, Ahorro: 0
+    CCSS: 0, Prestamos: 0, Vales: 0, Adelantos: 0, Ahorro: 0,
+    MontoPorHoraExtra: 0
   });
 
   const editarPago = (pago) => {
@@ -464,7 +511,8 @@ export const Dashboard = () => {
       Prestamos: pago.Prestamos,
       Vales: pago.Vales,
       Adelantos: pago.Adelantos,
-      Ahorro: pago.Ahorro
+      Ahorro: pago.Ahorro,
+      MontoPorHoraExtra: 0,
     });
     setShowCrearPago(true);
     setModoEditarPago(true);
@@ -485,8 +533,9 @@ export const Dashboard = () => {
         break;
     }
 
-    const extras = form.HorasExtra * (form.SalarioBase / 30 / 8); // pago x hora extra (aprox)
-    const ingresos = ingresoBase + form.Comisiones + form.Viaticos + extras;
+    const pagoHorasExtra = form.HorasExtra * form.MontoPorHoraExtra; // ← NUEVO cálculo
+    // const extras = form.HorasExtra * form.MontoPorHoraExtra; // ← usa lo ingresado
+    const ingresos = ingresoBase + form.Comisiones + form.Viaticos + pagoHorasExtra;
     const egresos = form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
 
     return ingresos - egresos;
@@ -637,6 +686,20 @@ export const Dashboard = () => {
     }
   };
 
+  const descargarPDFColillas = () => {
+    const elemento = document.querySelector('.reporte-colillas');
+
+    const options = {
+      margin: 0.2,
+      filename: `reporte-pagos-${new Date().toISOString().slice(0, 10)}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, scrollY: 0, useCORS: true },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
+    };
+
+    html2pdf().set(options).from(elemento).save();
+  };
+
   const verPagosColaborador = async (cedula) => {
     try {
       const colaborador = colaboradores.find(c => c.CedulaID === cedula);
@@ -783,12 +846,13 @@ export const Dashboard = () => {
                 <input type="text" className="form-control" name="Direccion" onChange={handleChange} required />
 
                 <label>Empresa:</label>
-                <select className="form-select form-select_option" name="Empresa" onChange={handleChange} required>
-                  <option value="">Selecciona una empresa</option>
-                  <option value="Noah Systems">Noah Systems</option>
-                  <option value="Techno Noah">Techno Noah</option>
-                  <option value="Super">Super</option>
-                </select>
+                <input
+                  type="text"
+                  className="form-control"
+                  name="Empresa"
+                  value={localStorage.getItem("localidad")}
+                  readOnly
+                />
               </div>
 
               {/* Tercera columna (nueva) */}
@@ -860,7 +924,9 @@ export const Dashboard = () => {
                     abrirModalFinanciamiento();
                   } else if (card.id === "vales") {
                     try {
-                      const response = await fetch("http://localhost:3001/api/colaboradores");
+                      // const response = await fetch("http://localhost:3001/api/colaboradores");
+                      const localidad = localStorage.getItem("localidad");
+                      const response = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
                       const data = await response.json();
                       setColaboradores(data);
                       setShowValesModal(true);
@@ -975,14 +1041,15 @@ export const Dashboard = () => {
             <h3>Crear Pago para {selectedColaborador.Nombre}</h3>
 
             <div className="formulario-grid-3cols">
+              {/* Campos normales */}
               {[
                 ["Contrato", "text"], ["Cuenta", "text"], ["SalarioBase", "number"], ["TipoPago", "select"],
-                ["HorasTrabajadas", "number"], ["HorasExtra", "number"], ["Comisiones", "number"],
-                ["Viaticos", "number"], ["CCSS", "number"], ["Prestamos", "number"],
+                ["HorasTrabajadas", "number"], ["HorasExtra", "number"], ["MontoPorHoraExtra", "number"], // 👈 NUEVO
+                ["Comisiones", "number"], ["Viaticos", "number"], ["CCSS", "number"], ["Prestamos", "number"],
                 ["Vales", "number"], ["Adelantos", "number"], ["Ahorro", "number"]
               ].map(([campo, tipo]) => (
                 <div key={campo} className="formulario-item">
-                  <label>{campo}</label>
+                  <label>{campo === "MontoPorHoraExtra" ? "₡ por Hora Extra" : campo}</label>
                   {tipo === "select" ? (
                     <select
                       className="form-control"
@@ -998,7 +1065,7 @@ export const Dashboard = () => {
                       type={tipo}
                       className="form-control"
                       value={pagoForm[campo]}
-                      readOnly={campo === "Contrato"} // ← Esto es lo nuevo
+                      readOnly={campo === "Contrato"}
                       onChange={(e) =>
                         setPagoForm({
                           ...pagoForm,
@@ -1012,7 +1079,12 @@ export const Dashboard = () => {
             </div>
 
             <hr />
-            <p><strong>Total a Pagar: </strong>₡{calcularPagoTotal(pagoForm).toLocaleString()}</p>
+            <p>
+              <strong>Horas Extra:</strong> {pagoForm.HorasExtra} horas x ₡{pagoForm.MontoPorHoraExtra?.toFixed(2)} = ₡{(pagoForm.HorasExtra * pagoForm.MontoPorHoraExtra).toLocaleString()}
+            </p>
+            <p>
+              <strong>Total a Pagar: </strong>₡{calcularPagoTotal(pagoForm).toLocaleString()}
+            </p>
             <div className="text-end">
               <button className="btn btn-secondary me-2" onClick={cerrarModalCrearPago}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarPagoPlanilla}>Guardar Pago</button>
@@ -1676,10 +1748,17 @@ export const Dashboard = () => {
                         Crear Pago
                       </button>
                       <button
-                        className="btn btn-sm btn-info"
-                        onClick={() => verPagosColaborador(colaborador.CedulaID)}
+                        className="btn btn-sm btn-secondary me-1"
+                        onClick={() => setShowReporteTabla(true)}
                       >
-                        Ver Pagos
+                        Reporte
+                      </button>
+
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => setShowReporteColillas(true)}
+                      >
+                        Ver Colillas
                       </button>
                     </td>
                   </tr>
@@ -1687,6 +1766,107 @@ export const Dashboard = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {showReporteTabla && (
+        <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Reporte de Pagos por Rango de Fechas</h3>
+
+            <div className="d-flex gap-3 mb-3">
+              <div>
+                <label>Desde:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={fechaInicioReporte}
+                  onChange={(e) => setFechaInicioReporte(e.target.value)}
+                />
+              </div>
+              <div>
+                <label>Hasta:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={fechaFinReporte}
+                  onChange={(e) => setFechaFinReporte(e.target.value)}
+                />
+              </div>
+              <div className="align-self-end">
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    try {
+                      const localidad = localStorage.getItem("localidad");
+                      const res = await fetch(`http://localhost:3001/api/reporte-pagos?inicio=${fechaInicioReporte}&fin=${fechaFinReporte}&localidad=${encodeURIComponent(localidad)}`);
+                      const data = await res.json();
+                      setPagosFiltrados(data);
+                    } catch (err) {
+                      console.error("Error al cargar reporte:", err);
+                    }
+                  }}
+                >
+                  Buscar
+                </button>
+              </div>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table table-bordered table-striped">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Cédula</th>
+                    <th>Fecha</th>
+                    <th>Total Pago</th>
+                    <th>Horas Trabajadas</th>
+                    <th>Horas Extra</th>
+                    <th>Comisiones</th>
+                    <th>Viáticos</th>
+                    <th>CCSS</th>
+                    <th>Préstamos</th>
+                    <th>Vales</th>
+                    <th>Adelantos</th>
+                    <th>Ahorro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagosFiltrados.map((pago, index) => (
+                    <tr key={index}>
+                      <td>{pago.Nombre}</td>
+                      <td>{pago.CedulaID}</td>
+                      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                      <td>₡{pago.TotalPago.toLocaleString()}</td>
+                      <td>{pago.HorasTrabajadas}</td>
+                      <td>{pago.HorasExtra}</td>
+                      <td>₡{pago.Comisiones.toLocaleString()}</td>
+                      <td>₡{pago.Viaticos.toLocaleString()}</td>
+                      <td>₡{pago.CCSS.toLocaleString()}</td>
+                      <td>₡{pago.Prestamos.toLocaleString()}</td>
+                      <td>₡{pago.Vales.toLocaleString()}</td>
+                      <td>₡{pago.Adelantos.toLocaleString()}</td>
+                      <td>₡{pago.Ahorro.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowReporteTabla(false)}>Cerrar</button>
+              <button className="btn btn-outline-primary me-2" onClick={() => window.print()}>
+                Imprimir
+              </button>
+            </div>
+            <div className="text-end mt-3">
+
+              {/* <button className="btn btn-secondary" onClick={() => setShowReporteModal(false)}>
+              Cerrar
+            </button> */}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -1881,6 +2061,123 @@ export const Dashboard = () => {
             </table>
             <div className="text-end">
               <button className="btn btn-secondary" onClick={() => setShowPagosModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReporteColillas && (
+        <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>Reporte de Pagos - Planilla</h3>
+
+            {/* Filtro de fechas */}
+            <div className="mb-3 d-flex flex-wrap gap-3 align-items-center">
+              <div>
+                <label>Desde:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                />
+              </div>
+              <div>
+                <label>Hasta:</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                />
+              </div>
+              <div className="mt-4 d-flex gap-2">
+                <button className="btn btn-primary" onClick={generarReportePagos}>Generar</button>
+                <button className="btn btn-outline-primary" onClick={() => window.print()}>Imprimir</button>
+                <button className="btn btn-outline-danger" onClick={descargarPDFColillas}>Descargar PDF</button>
+              </div>
+
+
+
+            </div>
+
+            {/* Resultados */}
+
+            <div className="reporte-colillas mt-4" id="contenido-colillas">
+              {pagosFiltrados.length > 0 ? (
+                pagosFiltrados.map((pago, i) => (
+                  <table key={i} className="table table-bordered table-striped mb-4">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Cédula</th>
+                        <th>Fecha</th>
+
+                        <th>Horas Trabaj</th>
+                        <th>Horas Extra</th>
+                        <th>Comisiones</th>
+                        <th>Viáticos</th>
+                        <th>CCSS</th>
+                        <th>Préstamos</th>
+                        <th>Vales</th>
+                        <th>Adelantos</th>
+                        <th>Ahorro</th>
+                        <th>Total Pago</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{pago.Nombre}</td>
+                        <td>{pago.CedulaID}</td>
+                        <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+
+                        <td>{pago.HorasTrabajadas}</td>
+                        <td>{pago.HorasExtra}</td>
+                        <td>₡{pago.Comisiones.toLocaleString()}</td>
+                        <td>₡{pago.Viaticos.toLocaleString()}</td>
+                        <td>₡{pago.CCSS.toLocaleString()}</td>
+                        <td>₡{pago.Prestamos.toLocaleString()}</td>
+                        <td>₡{pago.Vales.toLocaleString()}</td>
+                        <td>₡{pago.Adelantos.toLocaleString()}</td>
+                        <td>₡{pago.Ahorro.toLocaleString()}</td>
+                        <td>₡{pago.TotalPago.toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ))
+              ) : (
+                <p className="text-center text-muted">No se encontraron pagos en el rango indicado.</p>
+              )}
+            </div>
+            {/*
+            <div className="reporte-colillas mt-4">
+              {Array.isArray(pagosFiltrados) && pagosFiltrados.length > 0 ? (
+                pagosFiltrados.map((pago, i) => (
+                  <div key={i} className="colilla mb-4 p-3 border rounded shadow-sm">
+                    <p><strong>Nombre:</strong> {pago.Nombre}</p>
+                    <p><strong>Cédula:</strong> {pago.CedulaID}</p>
+                    <p><strong>Fecha:</strong> {pago.FechaRegistro?.slice(0, 10)}</p>
+                    <p><strong>Total a Pagar:</strong> ₡{pago.TotalPago.toLocaleString()}</p>
+                    <hr />
+                    <p><strong>Horas Trabajadas:</strong> {pago.HorasTrabajadas}</p>
+                    <p><strong>Horas Extra:</strong> {pago.HorasExtra}</p>
+                    <p><strong>Comisiones:</strong> ₡{pago.Comisiones.toLocaleString()}</p>
+                    <p><strong>Viáticos:</strong> ₡{pago.Viaticos.toLocaleString()}</p>
+                    <p><strong>CCSS:</strong> ₡{pago.CCSS.toLocaleString()}</p>
+                    <p><strong>Préstamos:</strong> ₡{pago.Prestamos.toLocaleString()}</p>
+                    <p><strong>Vales:</strong> ₡{pago.Vales.toLocaleString()}</p>
+                    <p><strong>Adelantos:</strong> ₡{pago.Adelantos.toLocaleString()}</p>
+                    <p><strong>Ahorro:</strong> ₡{pago.Ahorro.toLocaleString()}</p>
+                    <div className="mt-3 text-muted text-center">- - - - - - - - - - - - - - - - - - - - - -</div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-muted">No se encontraron pagos en el rango indicado.</p>
+              )}
+            </div>
+                 */}
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary" onClick={() => setShowReporteColillas(false)}>Cerrar</button>
             </div>
           </div>
         </div>
