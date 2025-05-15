@@ -46,6 +46,9 @@ export const Dashboard = () => {
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [pagosFiltrados, setPagosFiltrados] = useState([]);
+  const [showVerPendientes, setShowVerPendientes] = useState(false);
+  const [pendientesVale, setPendientesVale] = useState([]);
+  const [pendientesFinanciamiento, setPendientesFinanciamiento] = useState([]);
   const rowsPerPage = 5;
 
   useEffect(() => {
@@ -319,6 +322,25 @@ export const Dashboard = () => {
     }
   };
 
+  const cargarPendientes = async (cedula) => {
+    try {
+      const backendUrl = "http://localhost:3001";
+      const [valesRes, finanRes] = await Promise.all([
+        fetch(`${backendUrl}/api/vales/${cedula}`),
+        fetch(`${backendUrl}/api/financiamientos/${cedula}`)
+      ]);
+
+      const valesData = await valesRes.json();
+      const financiamientosData = await finanRes.json();
+
+      setPendientesVale(valesData);
+      setPendientesFinanciamiento(financiamientosData);
+      setShowVerPendientes(true);
+    } catch (error) {
+      console.error("Error cargando pendientes:", error);
+    }
+  };
+
   const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
   const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
   const [pagoFinanciamientoForm, setPagoFinanciamientoForm] = useState({
@@ -560,7 +582,8 @@ export const Dashboard = () => {
   const [financiamientoForm, setFinanciamientoForm] = useState({
     CedulaID: "", Nombre: "", Producto: "", Monto: 0,
     FechaCreacion: new Date().toISOString().slice(0, 10),
-    Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
+    Plazo: 0, InteresPorcentaje: 0, Descripcion: "",
+    Localidad: localStorage.getItem("localidad") // 👈 Se agrega automáticamente
   });
 
   const abrirModalFinanciamiento = async () => {
@@ -653,33 +676,38 @@ export const Dashboard = () => {
 
   const guardarFinanciamiento = async () => {
     try {
+      const body = {
+        ...financiamientoForm,
+        Localidad: localStorage.getItem("localidad") // 👈 aseguramos valor actualizado
+      };
+
       let response;
       if (modoEditarFinanciamiento && financiamientoForm.ID) {
         response = await fetch(`http://localhost:3001/api/financiamientos/${financiamientoForm.ID}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(financiamientoForm)
+          body: JSON.stringify(body)
         });
       } else {
         response = await fetch("http://localhost:3001/api/financiamientos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(financiamientoForm)
+          body: JSON.stringify(body)
         });
       }
 
       const data = await response.json();
       alert(data.message || "Financiamiento procesado correctamente");
-
       setShowFinanciamientoModal(false);
       setModoEditarFinanciamiento(false);
       setFinanciamientoForm({
         CedulaID: "", Nombre: "", Producto: "", Monto: 0,
         FechaCreacion: new Date().toISOString().slice(0, 10),
-        Plazo: 0, InteresPorcentaje: 0, Descripcion: ""
+        Plazo: 0, InteresPorcentaje: 0, Descripcion: "",
+        Localidad: localStorage.getItem("localidad")
       });
 
-      verListaFinanciamientos(); // Actualiza la lista si estás en modo VER
+      verListaFinanciamientos();
     } catch (error) {
       console.error("Error al guardar financiamiento:", error);
       alert("Error al guardar financiamiento");
@@ -1089,6 +1117,12 @@ export const Dashboard = () => {
               <button className="btn btn-secondary me-2" onClick={cerrarModalCrearPago}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarPagoPlanilla}>Guardar Pago</button>
             </div>
+            <button
+              className="btn btn-info mb-2"
+              onClick={() => cargarPendientes(selectedColaborador?.CedulaID)}
+            >
+              Ver Pendientes
+            </button>
           </div>
         </div>
       )}
@@ -1219,7 +1253,8 @@ export const Dashboard = () => {
         <div className="modal-overlay" onClick={() => setIsEditing(false)}>
           <div className="modal-content modal-content-editar_colaborador" onClick={(e) => e.stopPropagation()}>
             <h3>Editar Colaborador</h3>
-            {/* Imagen (aunque esté vacía por ahora) */}
+
+            {/* Imagen */}
             <div className="mb-3 text-center">
               <label className="form-label">Foto del colaborador:</label>
               <div>
@@ -1231,23 +1266,132 @@ export const Dashboard = () => {
                 />
               </div>
               <input type="file" accept="image/*" onChange={handleFotoChange} className="form-control mt-2" />
+
+
             </div>
 
-            <div className="formulario-grid">
-              {["Nombre", "Apellidos", "CedulaID", "IDColaborador", "Telefono", "Correo", "Direccion", "Empresa", "Contrato", "Cuenta", "SalarioBase"].map((campo) => (
-                <div className="formulario-col" key={campo}>
-                  <label>{campo}:</label>
-                  <input
-                    type={campo === "SalarioBase" ? "number" : "text"}
-                    className="form-control form-control-sm"
-                    value={selectedColaborador[campo] || ""}
-                    onChange={(e) => setSelectedColaborador({ ...selectedColaborador, [campo]: e.target.value })}
-                  />
-                </div>
-              ))}
+            {/* Formulario en 3 columnas */}
+            <div className="formulario-grid-3cols">
+              {/* <div className="formulario-item">
+                <label>Fecha Ingreso:</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.FechaIngreso ? selectedColaborador.FechaIngreso.slice(0, 10) : ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, FechaIngreso: e.target.value })}
+                />
+              </div> */}
+              <div className="formulario-item">
+                <label>Nombre:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Nombre || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Nombre: e.target.value })}
+                />
+              </div>
 
-              {/* Agrupar Contraseña y Fecha en la misma fila */}
-              <div className="formulario-col">
+              <div className="formulario-item">
+                <label>Apellidos:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Apellidos || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Apellidos: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Cédula:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.CedulaID || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, CedulaID: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>ID Colaborador:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.IDColaborador || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, IDColaborador: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Teléfono:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Telefono || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Telefono: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Correo:</label>
+                <input
+                  type="email"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Correo || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Correo: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Dirección:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Direccion || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Direccion: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Contrato:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Contrato || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Contrato: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Cuenta:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.Cuenta || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Cuenta: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Salario Base:</label>
+                <input
+                  type="number"
+                  className="form-control form-control-sm"
+                  value={selectedColaborador.SalarioBase || ""}
+                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, SalarioBase: e.target.value })}
+                />
+              </div>
+
+              <div className="formulario-item">
+                <label>Empresa:</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  value={localStorage.getItem("localidad")}
+                  readOnly
+                />
+              </div>
+
+              <div className="formulario-item">
                 <label>Contraseña:</label>
                 <input
                   type="password"
@@ -1256,8 +1400,9 @@ export const Dashboard = () => {
                   onChange={(e) => setSelectedColaborador({ ...selectedColaborador, Contrasena: e.target.value })}
                 />
               </div>
-              <div className="formulario-col">
-                <label>Fecha de Ingreso:</label>
+
+              <div className="formulario-item">
+                <label>Fecha Ingreso:</label>
                 <input
                   type="date"
                   className="form-control form-control-sm"
@@ -1269,7 +1414,15 @@ export const Dashboard = () => {
 
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setIsEditing(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleUpdateColaborador}>Guardar Cambios</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  selectedColaborador.Empresa = localStorage.getItem("localidad"); // forzamos la localidad antes de guardar
+                  handleUpdateColaborador();
+                }}
+              >
+                Guardar Cambios
+              </button>
             </div>
           </div>
         </div>
@@ -1527,9 +1680,9 @@ export const Dashboard = () => {
                 <label>Empresa:</label>
                 <input
                   type="text"
-                  className="form-control"
-                  value={valeForm.Empresa}
-                  onChange={(e) => setValeForm({ ...valeForm, Empresa: e.target.value })}
+                  className="form-control form-control-sm"
+                  value={localStorage.getItem("localidad")}
+                  readOnly
                 />
               </div>
 
@@ -1567,11 +1720,15 @@ export const Dashboard = () => {
                 className="btn btn-primary"
                 onClick={async () => {
                   try {
+                    const localidad = localStorage.getItem("localidad"); // ← aseguramos la localidad
+                    const valeConEmpresa = { ...valeForm, Empresa: localidad }; // ← insertamos Empresa
+
                     await fetch("http://localhost:3001/api/vales", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(valeForm)
+                      body: JSON.stringify(valeConEmpresa) // ← enviamos con Empresa incluida
                     });
+
                     alert("Vale registrado correctamente");
                     setShowValesModal(false);
                     setValeForm({
@@ -1685,6 +1842,13 @@ export const Dashboard = () => {
                   rows={3}
                   value={financiamientoForm.Descripcion}
                   onChange={(e) => setFinanciamientoForm({ ...financiamientoForm, Descripcion: e.target.value })}
+                />
+                <label className="mt-2">Localidad:</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={localStorage.getItem("localidad")}
+                  readOnly
                 />
               </div>
             </div>
@@ -1976,13 +2140,13 @@ export const Dashboard = () => {
                             setShowAplicarPagoModal(true);    // 👈 ABRE el modal de aplicar pago
                           }}
                         >
-                          Aplicar Pago
+                          Aplicar
                         </button>
                         <button
                           className="btn btn-sm btn-success me-1 button-lista-financimientos"
                           onClick={() => verAbonos(f.ID)}
                         >
-                          Ver Abonos
+                          Abonos
                         </button>
                       </td>
                     </tr>
@@ -2061,6 +2225,58 @@ export const Dashboard = () => {
             </table>
             <div className="text-end">
               <button className="btn btn-secondary" onClick={() => setShowPagosModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVerPendientes && (
+        <div className="modal-overlay" onClick={() => setShowVerPendientes(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Pendientes del Colaborador</h4>
+
+            <h6 className="mt-3">Vales</h6>
+            <table className="table table-bordered">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Motivo</th>
+                  <th>Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendientesVale.map((vale, i) => (
+                  <tr key={i}>
+                    <td>{new Date(vale.FechaRegistro).toLocaleDateString()}</td>
+                    <td>{vale.Motivo}</td>
+                    <td>₡{parseFloat(vale.MontoVale).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <h6 className="mt-3">Financiamientos</h6>
+            <table className="table table-bordered">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Descripción</th>
+                  <th>Monto Pendiente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendientesFinanciamiento.map((fin, i) => (
+                  <tr key={i}>
+                    <td>{new Date(fin.FechaCreacion).toLocaleDateString()}</td>
+                    <td>{fin.Descripcion}</td>
+                    <td>₡{parseFloat(fin.MontoPendiente || 0).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="d-flex justify-content-end mt-3">
+              <button className="btn btn-secondary" onClick={() => setShowVerPendientes(false)}>Cerrar</button>
             </div>
           </div>
         </div>

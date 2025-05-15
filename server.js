@@ -349,7 +349,7 @@ app.put("/api/pago-planilla/:id", async (req, res) => {
 app.post('/api/financiamientos', async (req, res) => {
   const {
     CedulaID, Nombre, Producto, Monto, FechaCreacion,
-    Plazo, InteresPorcentaje, Descripcion
+    Plazo, InteresPorcentaje, Descripcion, Localidad
   } = req.body;
 
   try {
@@ -363,14 +363,15 @@ app.post('/api/financiamientos', async (req, res) => {
       .input('Plazo', sql.Int, Plazo)
       .input('InteresPorcentaje', sql.Decimal(5, 2), InteresPorcentaje || 0)
       .input('Descripcion', sql.NVarChar(sql.MAX), Descripcion)
+      .input('Localidad', sql.NVarChar, Localidad || '')
       .query(`
         INSERT INTO Financiamientos (
   CedulaID, Nombre, Producto, Monto, FechaCreacion,
-  Plazo, InteresPorcentaje, Descripcion, MontoPendiente
+  Plazo, InteresPorcentaje, Descripcion, MontoPendiente, Localidad
 )
 VALUES (
   @CedulaID, @Nombre, @Producto, @Monto, @FechaCreacion,
-  @Plazo, @InteresPorcentaje, @Descripcion, @Monto
+  @Plazo, @InteresPorcentaje, @Descripcion, @Monto, @Localidad
 )
       `);
 
