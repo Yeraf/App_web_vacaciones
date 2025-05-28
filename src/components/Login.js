@@ -14,18 +14,18 @@ export const Login = () => {
   const starsRef = React.useRef(null);
 
   const handleJump = () => {
-  setIsJumping(true);
-  setTimeout(() => setIsJumping(false), 600); // Reset salto
-  
+    setIsJumping(true);
+    setTimeout(() => setIsJumping(false), 600); // Reset salto
 
-for (let i = 0; i < 10; i++) {
-  const star = document.createElement("div");
-   star.className = "star";
-    star.style.left = `${Math.random() * 80 + 10}px`;
-     starsRef.current.appendChild(star);
-   setTimeout(() => star.remove(), 1000); // Eliminar después de animar
- }
- };
+
+    for (let i = 0; i < 10; i++) {
+      const star = document.createElement("div");
+      star.className = "star";
+      star.style.left = `${Math.random() * 80 + 10}px`;
+      starsRef.current.appendChild(star);
+      setTimeout(() => star.remove(), 1000); // Eliminar después de animar
+    }
+  };
 
 
   // Mover hormiga 
@@ -58,34 +58,49 @@ for (let i = 0; i < 10; i++) {
   // Aquí hacemos el Login
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      const res = await fetch("http://localhost:3001/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correo, contrasena }),
-      });
+  try {
+    const res = await fetch("http://localhost:3001/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ correo, contrasena }),
+    });
 
-      const data = await res.json();
-
-      if (data.success) {
-        const usuario = data.usuario;
-
-        // Guardamos los datos importantes en localStorage
-        localStorage.setItem("usuario", JSON.stringify(usuario));
-        localStorage.setItem("localidad", usuario.Localidad); // ⬅️ ESTA es la línea que necesita
-
-        // Redireccionamos al Dashboard
-        navigate("/dashboard");
-      } else {
-        alert(data.message || "Credenciales inválidas");
-      }
-    } catch (error) {
-      console.error("Error al iniciar sesión:", error);
-      alert("Error al iniciar sesión");
+    if (!res.ok) {
+      alert("Credenciales incorrectas");
+      return;
     }
-  };
+
+    const data = await res.json();
+
+    if (data.success && data.usuario) {
+      const usuario = data.usuario;
+
+      // Guardar en localStorage de forma segura
+      localStorage.setItem("usuario", JSON.stringify(usuario));
+
+      if (usuario.Localidad) {
+        localStorage.setItem("localidad", usuario.Localidad);
+      } else {
+        console.warn("Localidad no encontrada en el objeto de usuario.");
+        localStorage.removeItem("localidad");
+      }
+
+      // Esperar brevemente para garantizar que el almacenamiento esté completo
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Navegar solo si todo está correcto
+      navigate("/dashboard");
+    } else {
+      alert(data.message || "Credenciales inválidas");
+    }
+
+  } catch (error) {
+    console.error("Error al iniciar sesión:", error);
+    alert("Error al iniciar sesión");
+  }
+};
 
   return (
     <div>

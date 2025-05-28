@@ -6,13 +6,44 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ✅ Define primero las opciones CORS
 const corsOptions = {
-  origin: 'http://localhost:3000', // su frontend
+  origin: 'http://localhost:3000',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type'],
 };
 
+// ✅ Luego aplica los middlewares
 app.use(cors(corsOptions));
+app.use(express.json({ limit: '5mb' }));
+// Login
+
+app.post('/api/login', async (req, res) => {
+  const { correo, contrasena } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Correo", sql.VarChar, correo)
+      .input("Contrasena", sql.VarChar, contrasena)
+      .query(`
+        SELECT ID, Nombre, Correo, Localidad
+        FROM Usuarios
+        WHERE Correo = @Correo AND Contrasena = @Contrasena
+      `);
+
+    if (result.recordset.length === 1) {
+      res.json({ success: true, usuario: result.recordset[0] });
+    } else {
+      res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+    }
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+
 
 app.use(express.json({ limit: '5mb' })); // o más si lo necesita
 
@@ -179,37 +210,68 @@ app.delete('/api/colaboradores/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/vales/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .query('DELETE FROM Vales WHERE ID = @ID');
+
+    res.status(200).json({ message: 'Vale eliminado correctamente' });
+  } catch (err) {
+    console.error("Error al eliminar vale:", err);
+    res.status(500).json({ message: "Error al eliminar vale" });
+  }
+});
+
+app.delete('/api/financiamientos/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .query('DELETE FROM Financiamientos WHERE ID = @ID');
+
+    res.status(200).json({ message: 'Financiamiento eliminado correctamente' });
+  } catch (err) {
+    console.error("Error al eliminar financiamiento:", err);
+    res.status(500).json({ message: "Error al eliminar financiamiento" });
+  }
+});
+
 // POST - Guardar boleta de vacaciones
 app.post("/api/vacaciones", async (req, res) => {
   const {
     CedulaID, Nombre, FechaIngreso,
     FechaSalida, FechaEntrada, DiasTomados,
-    Detalle, NumeroBoleta
+    Detalle, NumeroBoleta, Empresa
   } = req.body;
   console.log("Boleta recibida:", req.body);
   try {
     const pool = await sql.connect(dbConfig); // ← necesario aquí
     await pool.request()
-      .input("CedulaID", CedulaID)
-      .input("Nombre", Nombre)
-      .input("FechaIngreso", FechaIngreso)
-      .input("FechaSalida", FechaSalida)
-      .input("FechaEntrada", FechaEntrada)
-      .input("DiasTomados", DiasTomados)
-      .input("Detalle", Detalle)
-      .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
-      .query(`
-        INSERT INTO BoletaVacaciones (
-          CedulaID, Nombre, FechaIngreso,
-          FechaSalida, FechaEntrada, DiasTomados,
-          Detalle, NumeroBoleta
-        )
-        VALUES (
-          @CedulaID, @Nombre, @FechaIngreso,
-          @FechaSalida, @FechaEntrada, @DiasTomados,
-          @Detalle, @NumeroBoleta
-        )
-      `);
+  .input("CedulaID", CedulaID)
+  .input("Nombre", Nombre)
+  .input("FechaIngreso", FechaIngreso)
+  .input("FechaSalida", FechaSalida)
+  .input("FechaEntrada", FechaEntrada)
+  .input("DiasTomados", DiasTomados)
+  .input("Detalle", Detalle)
+  .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
+  .input("Empresa", sql.NVarChar, Empresa) // ⬅️ agregado
+  .query(`
+    INSERT INTO BoletaVacaciones (
+      CedulaID, Nombre, FechaIngreso,
+      FechaSalida, FechaEntrada, DiasTomados,
+      Detalle, NumeroBoleta, Empresa
+    )
+    VALUES (
+      @CedulaID, @Nombre, @FechaIngreso,
+      @FechaSalida, @FechaEntrada, @DiasTomados,
+      @Detalle, @NumeroBoleta, @Empresa
+    )
+  `);
 
     res.status(200).json({ message: "Boleta guardada exitosamente" });
   } catch (error) {
@@ -232,15 +294,22 @@ app.get('/api/vacaciones', async (req, res) => {
 app.get('/api/vacaciones/:cedula', async (req, res) => {
   try {
     const cedula = req.params.cedula;
+    const localidad = req.query.localidad || '';
     const pool = await sql.connect(dbConfig);
+
     const result = await pool.request()
-      .input("CedulaID", sql.NVarChar, cedula)
-      .query("SELECT ID, FechaSalida, FechaEntrada, DiasTomados, Detalle FROM BoletaVacaciones WHERE CedulaID = @CedulaID ORDER BY FechaSalida DESC");
+      .input('CedulaID', sql.NVarChar, cedula)
+      .input('Empresa', sql.NVarChar, localidad)
+      .query(`
+        SELECT * FROM BoletaVacaciones
+        WHERE CedulaID = @CedulaID AND Empresa = @Empresa
+        ORDER BY FechaSalida DESC
+      `);
 
     res.status(200).json(result.recordset);
   } catch (error) {
-    console.error("Error al obtener detalles de vacaciones:", error);
-    res.status(500).json({ error: "Error al obtener detalles" });
+    console.error("Error al obtener vacaciones:", error);
+    res.status(500).json({ message: 'Error al obtener vacaciones' });
   }
 });
 
@@ -280,14 +349,28 @@ app.post("/api/pago-planilla", async (req, res) => {
 
 app.get("/api/pago-planilla/:cedula", async (req, res) => {
   const cedula = req.params.cedula;
+  const localidad = req.query.localidad;
+
   try {
-    const result = await sql.query`
-      SELECT Nombre, CedulaID, TotalPago, FechaRegistro, HorasTrabajadas, HorasExtra, 
+    const pool = await sql.connect(dbConfig);
+    const request = pool.request()
+      .input("CedulaID", sql.NVarChar, cedula);
+
+    let query = `
+      SELECT Nombre, CedulaID, TotalPago, FechaRegistro, HorasTrabajadas, HorasExtra,
              Comisiones, Viaticos, CCSS, Prestamos, Vales, Adelantos, Ahorro
       FROM PagoPlanilla
-      WHERE CedulaID = ${cedula}
-      ORDER BY FechaRegistro DESC
+      WHERE CedulaID = @CedulaID
     `;
+
+    if (localidad) {
+      request.input("Localidad", sql.NVarChar, localidad);
+      query += " AND Localidad = @Localidad";
+    }
+
+    query += " ORDER BY FechaRegistro DESC";
+
+    const result = await request.query(query);
     res.json(result.recordset);
   } catch (err) {
     console.error("Error al obtener pagos:", err);
@@ -384,14 +467,26 @@ VALUES (
 
 app.get("/api/financiamientos/:cedula", async (req, res) => {
   const cedula = req.params.cedula;
+  const localidad = req.query.localidad;
 
   try {
-    const result = await sql.query`
-      SELECT ID, Producto, Monto, FechaCreacion, Plazo, InteresPorcentaje, Descripcion, Estado
+    const pool = await sql.connect(dbConfig);
+    const request = pool.request().input("CedulaID", sql.NVarChar, cedula);
+
+    let query = `
+      SELECT ID, Producto, Monto, MontoPendiente, FechaCreacion, Plazo, InteresPorcentaje, Descripcion, Estado
       FROM Financiamientos
-      WHERE CedulaID = ${cedula}
-      ORDER BY FechaCreacion DESC
+      WHERE CedulaID = @CedulaID
     `;
+
+    if (localidad) {
+      request.input("Localidad", sql.NVarChar, localidad);
+      query += ` AND Localidad = @Localidad`;
+    }
+
+    query += ` ORDER BY FechaCreacion DESC`;
+
+    const result = await request.query(query);
     res.json(result.recordset);
   } catch (err) {
     console.error("Error al obtener financiamientos:", err);
@@ -429,7 +524,12 @@ app.get('/api/vales/:cedula', async (req, res) => {
     const pool = await sql.connect(dbConfig);
     const result = await pool.request()
       .input('CedulaID', sql.NVarChar, cedula)
-      .query(`SELECT * FROM Vales WHERE CedulaID = @CedulaID ORDER BY FechaRegistro DESC`);
+      .input('Localidad', sql.NVarChar, req.query.localidad || '')
+      .query(`
+  SELECT * FROM Vales
+  WHERE CedulaID = @CedulaID AND Empresa = @Localidad
+  ORDER BY FechaRegistro DESC
+`);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error al obtener vales:", error);
@@ -461,9 +561,25 @@ app.get("/api/vacaciones/numeroboleta", async (req, res) => {
 });
 
 app.get('/api/financiamientos', async (req, res) => {
+  const localidad = req.query.localidad;
+
   try {
     const pool = await sql.connect(dbConfig);
-    const result = await pool.request().query("SELECT * FROM Financiamientos ORDER BY FechaCreacion DESC");
+    let result;
+
+    if (localidad) {
+      result = await pool.request()
+        .input("Localidad", sql.NVarChar, localidad)
+        .query(`
+          SELECT * FROM Financiamientos
+          WHERE Localidad = @Localidad
+          ORDER BY FechaCreacion DESC
+        `);
+    } else {
+      result = await pool.request()
+        .query("SELECT * FROM Financiamientos ORDER BY FechaCreacion DESC");
+    }
+
     res.json(result.recordset);
   } catch (err) {
     console.error("Error al obtener financiamientos:", err);
@@ -627,7 +743,7 @@ app.post("/api/pagos-financiamiento", async (req, res) => {
   try {
     const pool = await sql.connect(dbConfig);
 
-    // 1. Insertar el pago
+    // 1. Insertar el pago en PagosFinanciamiento
     await pool.request()
       .input("FinanciamientoID", sql.Int, FinanciamientoID)
       .input("FechaPago", sql.Date, FechaPago)
@@ -648,10 +764,41 @@ app.post("/api/pagos-financiamiento", async (req, res) => {
         WHERE ID = @ID
       `);
 
+    // 3. Consultar si el saldo ya es cero o menor
+    const result = await pool.request()
+      .input("ID", sql.Int, FinanciamientoID)
+      .query(`
+        SELECT * FROM Financiamientos
+        WHERE ID = @ID AND ISNULL(MontoPendiente, 0) <= 0
+      `);
+
+    if (result.recordset.length > 0) {
+      const f = result.recordset[0];
+
+      // 4. Registrar en tabla EliminadosFin
+      await pool.request()
+        .input("FinanciamientoID", sql.Int, f.ID)
+        .input("CedulaID", sql.NVarChar(50), f.CedulaID)
+        .input("Nombre", sql.NVarChar(100), f.Nombre)
+        .input("MontoOriginal", sql.Decimal(18, 2), f.Monto)
+        .input("FechaEliminacion", sql.Date, new Date())
+        .input("Motivo", sql.NVarChar(sql.MAX), "Eliminado automáticamente tras pago completo desde Planilla")
+        .query(`
+          INSERT INTO EliminadosFin (FinanciamientoID, CedulaID, Nombre, MontoOriginal, FechaEliminacion, Motivo)
+          VALUES (@FinanciamientoID, @CedulaID, @Nombre, @MontoOriginal, @FechaEliminacion, @Motivo)
+        `);
+
+      // 5. Eliminar de la tabla Financiamientos
+      await pool.request()
+        .input("ID", sql.Int, f.ID)
+        .query(`DELETE FROM Financiamientos WHERE ID = @ID`);
+    }
+
     res.json({ message: "Pago aplicado correctamente" });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error al aplicar el pago" });
+    console.error("Error al aplicar el pago de financiamiento:", err);
+    res.status(500).json({ error: "Error al aplicar el pago de financiamiento" });
   }
 });
 
@@ -819,32 +966,7 @@ app.post('/api/consultar-cedula-hacienda', async (req, res) => {
   }
 });
 
-// Login
 
-app.post('/api/login', async (req, res) => {
-  const { correo, contrasena } = req.body;
-
-  try {
-    const pool = await sql.connect(dbConfig);
-    const result = await pool.request()
-      .input("Correo", sql.VarChar, correo)
-      .input("Contrasena", sql.VarChar, contrasena)
-      .query(`
-        SELECT ID, Nombre, Correo, Localidad
-        FROM Usuarios
-        WHERE Correo = @Correo AND Contrasena = @Contrasena
-      `);
-
-    if (result.recordset.length === 1) {
-      res.json({ success: true, usuario: result.recordset[0] });
-    } else {
-      res.status(401).json({ success: false, message: 'Credenciales inválidas' });
-    }
-  } catch (error) {
-    console.error('Error en login:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
 
 // Insertar Localidad 
 
