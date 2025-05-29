@@ -251,16 +251,16 @@ app.post("/api/vacaciones", async (req, res) => {
   try {
     const pool = await sql.connect(dbConfig); // ← necesario aquí
     await pool.request()
-  .input("CedulaID", CedulaID)
-  .input("Nombre", Nombre)
-  .input("FechaIngreso", FechaIngreso)
-  .input("FechaSalida", FechaSalida)
-  .input("FechaEntrada", FechaEntrada)
-  .input("DiasTomados", DiasTomados)
-  .input("Detalle", Detalle)
-  .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
-  .input("Empresa", sql.NVarChar, Empresa) // ⬅️ agregado
-  .query(`
+      .input("CedulaID", CedulaID)
+      .input("Nombre", Nombre)
+      .input("FechaIngreso", FechaIngreso)
+      .input("FechaSalida", FechaSalida)
+      .input("FechaEntrada", FechaEntrada)
+      .input("DiasTomados", DiasTomados)
+      .input("Detalle", Detalle)
+      .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
+      .input("Empresa", sql.NVarChar, Empresa) // ⬅️ agregado
+      .query(`
     INSERT INTO BoletaVacaciones (
       CedulaID, Nombre, FechaIngreso,
       FechaSalida, FechaEntrada, DiasTomados,
@@ -854,46 +854,28 @@ app.get("/api/abonos/:financiamientoId", async (req, res) => {
   }
 });
 
-app.get('/api/aguinaldo/:cedula', async (req, res) => {
-  const { cedula } = req.params;
-  try {
-    await sql.connect(dbConfig);
-    const result = await sql.query`
-      SELECT TotalPago, FechaRegistro 
-      FROM PagoPlanilla 
-      WHERE CedulaID = ${cedula}
-        AND FechaRegistro >= DATEFROMPARTS(YEAR(GETDATE()) - 1, 12, 1)
-        AND FechaRegistro <= DATEFROMPARTS(YEAR(GETDATE()), 11, 30)
-    `;
-
-    const pagos = result.recordset;
-    const total = pagos.reduce((sum, pago) => sum + pago.TotalPago, 0);
-    const aguinaldo = total / 12; // ajustado para quincenal
-
-    res.json({ aguinaldo, pagos });
-  } catch (err) {
-    console.error("Error al calcular aguinaldo:", err);
-    res.status(500).json({ error: "Error al calcular aguinaldo" });
-  }
-});
 
 app.get('/api/aguinaldo/:cedula', async (req, res) => {
   const { cedula } = req.params;
+  const { localidad } = req.query;
 
   try {
     const pool = await sql.connect(dbConfig);
 
     const result = await pool.request()
       .input('CedulaID', sql.VarChar, cedula)
+      .input('Localidad', sql.NVarChar, localidad || '')
       .query(`
         SELECT FechaRegistro, TotalPago
         FROM PagoPlanilla
-        WHERE CedulaID = @CedulaID AND YEAR(FechaRegistro) = YEAR(GETDATE())
+        WHERE CedulaID = @CedulaID 
+          AND Localidad = @Localidad
+          AND FechaRegistro >= DATEFROMPARTS(YEAR(GETDATE()) - 1, 12, 1)
+          AND FechaRegistro <= DATEFROMPARTS(YEAR(GETDATE()), 11, 30)
       `);
 
     const pagos = result.recordset;
 
-    // Filtrar pagos válidos (excluye vales si se almacenan como parte)
     const totalAguinaldo = pagos.reduce((sum, pago) => sum + (pago.TotalPago || 0), 0) / 12;
 
     res.json({
@@ -906,6 +888,7 @@ app.get('/api/aguinaldo/:cedula', async (req, res) => {
     res.status(500).json({ error: "Error al calcular aguinaldo" });
   }
 });
+
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
@@ -1048,5 +1031,27 @@ app.get("/api/reporte-pagos", async (req, res) => {
   } catch (err) {
     console.error("Error en reporte-pagos:", err);
     res.status(500).json({ error: "Error interno al generar el reporte." });
+  }
+});
+
+app.get("/api/vacaciones/ultimoboleta", async (req, res) => {
+  const localidad = req.query.localidad;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Localidad", sql.NVarChar, localidad)
+      .query(`
+        SELECT TOP 1 NumeroBoleta
+        FROM BoletaVacaciones
+        WHERE Empresa = @Localidad
+        ORDER BY ID DESC
+      `);
+
+    const ultimo = result.recordset[0]?.NumeroBoleta || "Ninguno";
+    res.json({ NumeroBoleta: ultimo });
+  } catch (error) {
+    console.error("Error al obtener el último número de boleta:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 });

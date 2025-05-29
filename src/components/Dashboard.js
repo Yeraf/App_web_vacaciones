@@ -50,6 +50,9 @@ export const Dashboard = () => {
   const [pendientesVale, setPendientesVale] = useState([]);
   const [pendientesFinanciamiento, setPendientesFinanciamiento] = useState([]);
   const [pendientesAplicados, setPendientesAplicados] = useState([]);
+  const [ultimoNumeroBoleta, setUltimoNumeroBoleta] = useState("Cargando...");
+  const localidad = localStorage.getItem("localidad");
+  
   const rowsPerPage = 5;
 
   const formularioInicial = {
@@ -74,6 +77,13 @@ export const Dashboard = () => {
       fetchDiasTomados();
     }
   }, [activeCard]);
+
+
+  useEffect(() => {
+    if (showGenerarVacaciones) {
+      obtenerUltimoNumeroBoleta();
+    }
+  }, [showGenerarVacaciones]);
 
   const verDetalleVacaciones = async (cedula) => {
     try {
@@ -204,41 +214,8 @@ export const Dashboard = () => {
     }));
 
     setShowGenerarVacaciones(true);
+    obtenerUltimoNumeroBoleta(); // 👈 nuevo
   };
-
-  // const cargarDiasTomados = async () => {
-  //   try {
-  //     const response = await fetch("http://localhost:3001/api/vacaciones");
-  //     const data = await response.json();
-  //     const acumulados = {};
-  //     data.forEach(entry => {
-  //       if (!acumulados[entry.CedulaID]) acumulados[entry.CedulaID] = 0;
-  //       acumulados[entry.CedulaID] += entry.DiasTomados;
-  //     });
-  //     setDiasTomadosPorColaborador(acumulados);
-  //   } catch (error) {
-  //     console.error("Error al cargar días tomados:", error);
-  //   }
-  // };
-
-  ///Revisar
-
-  // const verPendientesColaborador = () => {
-  //   const cedula = colaboradorSeleccionado.CedulaID;
-  //   const localidad = localStorage.getItem("localidad");
-
-  //   if (!cedula || !localidad) {
-  //     console.warn("Faltan datos de cédula o localidad");
-  //     return;
-  //   }
-
-  //   fetch(`/api/financiamientos/${cedula}?localidad=${encodeURIComponent(localidad)}`)
-  // .then(res => res.json())
-  // .then(data => {
-  //   setFinanciamientosPendientes(data);
-  // })
-  // .catch(error => console.error("Error cargando financiamientos:", error));
-  // };
 
   const handleGuardarVacaciones = async () => {
     try {
@@ -252,6 +229,7 @@ export const Dashboard = () => {
         FechaEntrada: vacacionesForm.FechaEntrada,
         DiasTomados: diasTomados,
         Detalle: vacacionesForm.Detalle || "",
+        Empresa: localStorage.getItem("localidad") || ""
       };
       if (!vacacionesForm.NumeroBoleta || vacacionesForm.NumeroBoleta.trim() === "") {
         alert("Por favor, ingrese el número de boleta.");
@@ -394,6 +372,8 @@ export const Dashboard = () => {
 
   const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
   const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
+
+  
   const [pagoFinanciamientoForm, setPagoFinanciamientoForm] = useState({
     IDFinanciamiento: null,
     Fecha: new Date().toISOString().slice(0, 10),
@@ -482,17 +462,18 @@ export const Dashboard = () => {
   };
 
   const calcularAguinaldo = async (colaborador) => {
-    setSelectedColaborador(colaborador);
-    try {
-      const res = await fetch(`http://localhost:3001/api/aguinaldo/${colaborador.CedulaID}`);
-      const data = await res.json();
-      setAguinaldoCalculado(data.aguinaldo);
-      setPagosDelAguinaldo(data.pagos);
-      setShowAguinaldoModal(true);
-    } catch (err) {
-      console.error("Error al calcular aguinaldo:", err);
-    }
-  };
+  setSelectedColaborador(colaborador);
+  try {
+    const localidad = localStorage.getItem("localidad");
+    const res = await fetch(`http://localhost:3001/api/aguinaldo/${colaborador.CedulaID}?localidad=${encodeURIComponent(localidad)}`);
+    const data = await res.json();
+    setAguinaldoCalculado(data.aguinaldo);
+    setPagosDelAguinaldo(data.pagos);
+    setShowAguinaldoModal(true);
+  } catch (err) {
+    console.error("Error al calcular aguinaldo:", err);
+  }
+};
 
   const handlePlanillaModal = async () => {
     try {
@@ -816,6 +797,26 @@ export const Dashboard = () => {
 
     html2pdf().set(options).from(elemento).save();
   };
+
+  const obtenerUltimoNumeroBoleta = async () => {
+  try {
+    const res = await fetch(`http://localhost:3001/api/vacaciones/ultimoboleta?localidad=${encodeURIComponent(localidad)}`);
+    const data = await res.json();
+
+    // Validar que el campo venga definido, si no usar "Ninguno"
+    const numero = data?.NumeroBoleta ?? "Ninguno";
+    setUltimoNumeroBoleta(numero);
+  } catch (error) {
+    console.error("Error al obtener el último número de boleta:", error);
+    setUltimoNumeroBoleta("Error");
+  }
+};
+
+  useEffect(() => {
+    if (showGenerarVacaciones) {
+      obtenerUltimoNumeroBoleta();
+    }
+  }, [showGenerarVacaciones]);
 
   const verPagosColaborador = async (cedula) => {
     try {
@@ -1232,11 +1233,19 @@ export const Dashboard = () => {
                 <input
                   type="text"
                   className="form-control"
+                  required
+                />
+              </div>
+              {/* <div className="formulario-item">
+                <label>Número Boleta:</label>
+                <input
+                  type="text"
+                  className="form-control"
                   value={vacacionesForm.NumeroBoleta}
                   onChange={(e) => setVacacionesForm({ ...vacacionesForm, NumeroBoleta: e.target.value })}
                   required
                 />
-              </div>
+              </div> */}
 
               <div className="formulario-item">
                 <label>Cédula:</label>
@@ -1271,7 +1280,7 @@ export const Dashboard = () => {
               </div>
 
               <div className="formulario-item">
-                <label>Fecha de Regreso:</label>
+                <label>Fecha ultimo día de vacaciones:</label>
                 <input
                   type="date"
                   className="form-control"
@@ -1318,7 +1327,21 @@ export const Dashboard = () => {
                   onChange={(e) => setVacacionesForm({ ...vacacionesForm, Detalle: e.target.value })}
                 />
               </div>
+              <div className="formulario-item">
+                <label>Última Boleta:</label>
+                <input type="text" className="form-control" value={ultimoNumeroBoleta} readOnly />
+              </div>
+              <div className="formulario-item">
+                <label>Empresa:</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={localStorage.getItem("localidad") || ""}
+                  readOnly
+                />
+              </div>
             </div>
+
 
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowGenerarVacaciones(false)}>Cancelar</button>
@@ -1671,13 +1694,13 @@ export const Dashboard = () => {
             <table className="table">
               <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
               <tbody>
-                {pagosDelAguinaldo.map((pago, i) => (
-                  <tr key={i}>
-                    <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-                    <td>₡{pago.TotalPago.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
+  {(pagosDelAguinaldo || []).map((pago, i) => (
+    <tr key={i}>
+      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+      <td>₡{pago.TotalPago.toLocaleString()}</td>
+    </tr>
+  ))}
+</tbody>
             </table>
             <button className="btn btn-secondary mt-3" onClick={() => setShowAguinaldoModal(false)}>Cerrar</button>
           </div>

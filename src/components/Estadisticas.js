@@ -31,7 +31,7 @@ export const Estadisticas = () => {
   }, []);
 
   const totalColaboradores = colaboradores.length;
-  const totalSalarioBaseQuincenal = colaboradores.reduce((acc, curr) => acc + parseFloat(curr.SalarioBase || 0), 0);
+  const totalSalarioBaseQuincenal = colaboradores.reduce((acc, curr) => acc + parseFloat(curr.SalarioBase / 2 || 0), 0);
   const totalSalarioBaseMensual = totalSalarioBaseQuincenal * 2;
   const totalFinanciamientosPendientes = financiamientos.reduce((acc, curr) => acc + parseFloat(curr.MontoPendiente || 0), 0);
   const cantidadFinanciamientos = financiamientos.length;
@@ -71,7 +71,7 @@ export const Estadisticas = () => {
           <h4 className="mb-2">Colaboradores</h4>
           <hr />
           <p><strong>Total colaboradores:</strong> {totalColaboradores}</p>
-          <p><strong>Total planilla quincenal:</strong> ₡{totalSalarioBaseQuincenal.toLocaleString('es-CR', { minimumFractionDigits: 2 })}</p>
+          <p><strong>Total planilla quincenal:</strong> ₡{totalSalarioBaseQuincenal.toLocaleString ('es-CR',  { minimumFractionDigits: 2 })} </p>
           <hr />
           <p><strong>Total planilla mensual:</strong> ₡{totalSalarioBaseMensual.toLocaleString('es-CR', { minimumFractionDigits: 2 })}</p>
         </div>
