@@ -35,6 +35,7 @@ export const HeaderNav = () => {
   };
 
   const usuario = JSON.parse(localStorage.getItem('usuario'));
+  const localidad = usuario?.Localidad || "Sin Localidad";
 
   const handleLogout = () => {
     localStorage.removeItem('usuario');
@@ -44,7 +45,23 @@ export const HeaderNav = () => {
   return (
     <>
       {/* TOPBAR */}
-      <div className="topbar">
+      <div className="topbar d-flex justify-content-between align-items-center">
+        <div className="logo-topbar d-flex align-items-center">
+          <img src="/images/alpaca.png" alt="Logo" className="logo_alpaca" />
+          <h3 className="nombre_empresa">YOKU ADMIN</h3>
+        </div>
+
+        <div className="text-center flex-grow-1">
+          <h5 style={{ color: "white", margin: 0 }}>{localidad}</h5>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          {usuario && <span className="text-light">👋 Hola, {usuario.Nombre}</span>}
+          <button onClick={handleLogout} className="btn btn-outline-light btn-sm">Cerrar sesión</button>
+          <button className="hamburger" onClick={toggleSidebar}>&#9776;</button>
+        </div>
+      </div>
+      {/* <div className="topbar">
         <div className="logo-topbar">
           <img src="/images/alpaca.png" alt="Logo" className="logo_alpaca" />
           <h3 className="nombre_empresa">YOKU ADMIN</h3>
@@ -61,7 +78,7 @@ export const HeaderNav = () => {
             &#9776;
           </button>
         </div>
-      </div>
+      </div> */}
 
       {/* SIDEBAR */}
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>

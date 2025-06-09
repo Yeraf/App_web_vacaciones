@@ -58,49 +58,52 @@ export const Login = () => {
   // Aquí hacemos el Login
 
   const handleLogin = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  try {
-    const res = await fetch("http://localhost:3001/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ correo, contrasena }),
-    });
+    try {
+      const res = await fetch("http://localhost:3001/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo, contrasena }),
+      });
 
-    if (!res.ok) {
-      alert("Credenciales incorrectas");
-      return;
-    }
-
-    const data = await res.json();
-
-    if (data.success && data.usuario) {
-      const usuario = data.usuario;
-
-      // Guardar en localStorage de forma segura
-      localStorage.setItem("usuario", JSON.stringify(usuario));
-
-      if (usuario.Localidad) {
-        localStorage.setItem("localidad", usuario.Localidad);
-      } else {
-        console.warn("Localidad no encontrada en el objeto de usuario.");
-        localStorage.removeItem("localidad");
+      if (!res.ok) {
+        alert("Credenciales incorrectas");
+        return;
       }
 
-      // Esperar brevemente para garantizar que el almacenamiento esté completo
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const data = await res.json();
 
-      // Navegar solo si todo está correcto
-      navigate("/dashboard");
-    } else {
-      alert(data.message || "Credenciales inválidas");
+      if (data.success && data.usuario) {
+        const usuario = data.usuario;
+
+        // Guardar en localStorage de forma segura
+        localStorage.setItem("usuario", JSON.stringify(usuario));
+
+        if (usuario.Localidad) {
+          localStorage.setItem("localidad", usuario.Localidad);
+        } else {
+          console.warn("Localidad no encontrada en el objeto de usuario.");
+          localStorage.removeItem("localidad");
+        }
+
+        // Solución: Redirige como si diera F5
+        window.location.href = "/";
+
+        // Esperar brevemente para garantizar que el almacenamiento esté completo
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Navegar solo si todo está correcto
+        navigate("/dashboard");
+      } else {
+        alert(data.message || "Credenciales inválidas");
+      }
+
+    } catch (error) {
+      console.error("Error al iniciar sesión:", error);
+      alert("Error al iniciar sesión");
     }
-
-  } catch (error) {
-    console.error("Error al iniciar sesión:", error);
-    alert("Error al iniciar sesión");
-  }
-};
+  };
 
   return (
     <div>

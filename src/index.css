@@ -328,7 +328,7 @@ code {
 
 .sidebar.open {
   transform: translateX(0);
-  background-image: url('/public/images/jap3.jpeg');
+  background-image: url('/public/images/Japon1.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -835,5 +835,19 @@ body.sidebar-closed .content_section {
   .colilla {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+}
+
+@media print {
+  body {
+    width: 80mm;
+  }
+}
+
+@media print {
+  .print-content {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
   }
 }

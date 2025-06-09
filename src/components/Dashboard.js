@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, forwardRef } from "react";
 import html2pdf from "html2pdf.js";
+import * as XLSX from 'xlsx';
+import { saveAs } from "file-saver";
+import { EncabezadoEmpresa } from './EncabezadoEmpresa';
+import { useRef } from 'react';
+import { useReactToPrint } from "react-to-print";
+import { ModalImpresionBoleta } from './ModalImpresionBoleta';
+import { generarPDFBoleta } from './ContenedorImpresionBoleta';
 
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
@@ -51,10 +58,20 @@ export const Dashboard = () => {
   const [pendientesFinanciamiento, setPendientesFinanciamiento] = useState([]);
   const [pendientesAplicados, setPendientesAplicados] = useState([]);
   const [ultimoNumeroBoleta, setUltimoNumeroBoleta] = useState("Cargando...");
+  const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
+  const [financiamientos, setFinanciamientos] = useState([]);
+  const [vacacionesHistorial, setVacacionesHistorial] = useState([]);
   const localidad = localStorage.getItem("localidad");
-  
+  const [ultimaBoletaGenerada, setUltimaBoletaGenerada] = useState(null);
+  const [boletasFiltradas, setBoletasFiltradas] = useState([]);
+  const [busquedaBoleta, setBusquedaBoleta] = useState("");
+  const [paginaBoletas, setPaginaBoletas] = useState(1);
+  const [mostrarModalListadoBoletas, setMostrarModalListadoBoletas] = useState(false);
+  const [mostrarModalImpresion, setMostrarModalImpresion] = useState(false);
+  const boletasPorPagina = 5;
   const rowsPerPage = 5;
 
+  const componentRef = useRef();
   const formularioInicial = {
     Contrato: "",
     Cuenta: "",
@@ -85,6 +102,18 @@ export const Dashboard = () => {
     }
   }, [showGenerarVacaciones]);
 
+  useEffect(() => {
+    const obtenerNumeroBoleta = async () => {
+      const res = await fetch("/api/vacaciones/numeroboleta");
+      const data = await res.json();
+      setVacacionesForm(prev => ({
+        ...prev,
+        NumeroBoleta: data.numeroBoleta
+      }));
+    };
+    obtenerNumeroBoleta();
+  }, []);
+
   const verDetalleVacaciones = async (cedula) => {
     try {
       const localidad = localStorage.getItem("localidad");
@@ -96,6 +125,32 @@ export const Dashboard = () => {
       console.error("Error al cargar detalle:", error);
     }
   };
+
+ const ContenedorImpresionBoleta = forwardRef(({ boleta }, ref) => {
+  return (
+    <div ref={ref} style={{ width: "72mm", padding: "5px", fontSize: "12px", fontFamily: "monospace" }}>
+      <EncabezadoEmpresa />
+      <div style={{ textAlign: "center", marginTop: "10px" }}>
+        <h5 style={{ fontWeight: "bold" }}>BOLETA DE VACACIONES</h5>
+        <p><strong>Colaborador:</strong> {boleta.Nombre} {boleta.Apellidos || ''}</p>
+        <p><strong>Apellidos:</strong> {boleta.Apellidos}</p>
+        <p><strong>Cédula:</strong> {boleta.CedulaID}</p>
+        <p><strong>Desde:</strong> {new Date(boleta.FechaSalida).toLocaleDateString()}</p>
+        <p><strong>Hasta:</strong> {new Date(boleta.FechaEntrada).toLocaleDateString()}</p>
+        <p><strong>Días solicitados:</strong> {boleta.Dias || boleta.DiasTomados || boleta.CantidadDias || 'N/D'}</p>
+        <p><strong>Motivo:</strong> {boleta.Detalle}</p>
+        <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
+
+        {/* Días disponibles */}
+        {boleta.DiasDisponibles !== undefined && (
+          <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> {boleta.DiasDisponibles}</p>
+        )}
+      </div>
+    </div>
+  );
+});
+
+
 
   const fetchDiasTomados = async () => {
     try {
@@ -111,6 +166,8 @@ export const Dashboard = () => {
       console.error("Error al cargar días tomados:", error);
     }
   };
+
+  const refImpresion = useRef();
 
   const cerrarModalCrearPago = () => {
     setShowCrearPago(false);
@@ -133,6 +190,71 @@ export const Dashboard = () => {
   };
 
 
+  const imprimirColaboradores = () => {
+    const ventana = window.open("", "_blank");
+    const contenido = `
+    <html>
+    <head><title>Listado de Colaboradores</title></head>
+    <body>
+      <h2 style="text-align:center">Listado de Colaboradores</h2>
+      <table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Apellidos</th>
+            <th>Cédula</th>
+            <th>Puesto</th>
+            <th>Teléfono</th>
+            <th>Correo</th>
+            <th>Fecha Ingreso</th>
+            <th>Empresa</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${colaboradores.map(c => `
+            <tr>
+              <td>${c.Nombre}</td>
+              <td>${c.Apellidos}</td>
+              <td>${c.CedulaID}</td>
+              <td>${c.Puesto || ""}</td>
+              <td>${c.Telefono || ""}</td>
+              <td>${c.Correo || ""}</td>
+              <td>${c.FechaIngreso ? new Date(c.FechaIngreso).toLocaleDateString() : ""}</td>
+              <td>${c.Empresa}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <br>
+      <button onclick="window.print()">Imprimir</button>
+    </body>
+    </html>
+  `;
+
+    ventana.document.write(contenido);
+    ventana.document.close();
+  };
+
+  const ImpresionBoletaVacaciones = forwardRef(({ boleta }, ref) => {
+    return (
+      <div ref={ref} style={{ width: '80mm', padding: '10px' }}>
+        <EncabezadoEmpresa />
+        <div style={{ textAlign: 'center' }}>
+          <h4>Boleta de Vacaciones</h4>
+          <p><strong>Colaborador:</strong> {boleta.Nombre}</p>
+          <p><strong>Apellidos:</strong> {boleta.Apellidos}</p>
+          <p><strong>Cédula:</strong> {boleta.CedulaID}</p>
+          <p><strong>Desde:</strong> {boleta.FechaSalida?.slice(0, 10)}</p>
+          <p><strong>Hasta:</strong> {boleta.FechaEntrada?.slice(0, 10)}</p>
+          <p><strong>Días solicitados:</strong> {boleta.Dias}</p>
+          <p><strong>Motivo:</strong> {boleta.Detalle}</p>
+          <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
+        </div>
+      </div>
+    );
+  });
+
+  // export default ImpresionBoletaVacaciones;
   const handleVacacionesModal = async () => {
     try {
       const localidad = localStorage.getItem("localidad");
@@ -147,6 +269,37 @@ export const Dashboard = () => {
       console.error("Error al obtener colaboradores:", error);
     }
   };
+
+  const obtenerTodasBoletas = async () => {
+    try {
+      const localidad = localStorage.getItem("localidad") || "";
+      const res = await fetch(`http://localhost:3001/api/boletas-vacaciones?localidad=${encodeURIComponent(localidad)}`);
+
+      // 🚨 Si la respuesta no es exitosa, lanza error
+      if (!res.ok) {
+        const texto = await res.text(); // <-- Esto evitará el crash de JSON
+        throw new Error(`Error del servidor: ${res.status}\n${texto}`);
+      }
+
+      const data = await res.json();
+
+      const ordenadas = data.sort((a, b) => new Date(b.FechaSalida) - new Date(a.FechaSalida));
+      setBoletasFiltradas(ordenadas);
+    } catch (error) {
+      console.error("Error al obtener boletas:", error);
+      alert("Error cargando las boletas. Detalles en consola.");
+    }
+  };
+
+  const boletasPaginadas = boletasFiltradas.filter(b =>
+    (b.Nombre || "").toLowerCase().includes(busquedaBoleta.toLowerCase()) ||
+    (b.CedulaID || "").toLowerCase().includes(busquedaBoleta.toLowerCase())
+  ).slice((paginaBoletas - 1) * boletasPorPagina, paginaBoletas * boletasPorPagina);
+
+  const cambiarPaginaBoletas = (nuevaPagina) => {
+    setPaginaBoletas(nuevaPagina);
+  };
+
 
   const calcularDias = (fechaIngreso, cedula) => {
     const hoy = new Date();
@@ -217,38 +370,6 @@ export const Dashboard = () => {
     obtenerUltimoNumeroBoleta(); // 👈 nuevo
   };
 
-  const handleGuardarVacaciones = async () => {
-    try {
-      const diasTomados = calcularDiasVacaciones(vacacionesForm.FechaSalida, vacacionesForm.FechaEntrada);
-      const body = {
-        NumeroBoleta: vacacionesForm.NumeroBoleta,
-        CedulaID: selectedColaborador.CedulaID,
-        Nombre: selectedColaborador.Nombre,
-        FechaIngreso: selectedColaborador.FechaIngreso,
-        FechaSalida: vacacionesForm.FechaSalida,
-        FechaEntrada: vacacionesForm.FechaEntrada,
-        DiasTomados: diasTomados,
-        Detalle: vacacionesForm.Detalle || "",
-        Empresa: localStorage.getItem("localidad") || ""
-      };
-      if (!vacacionesForm.NumeroBoleta || vacacionesForm.NumeroBoleta.trim() === "") {
-        alert("Por favor, ingrese el número de boleta.");
-        return;
-      }
-      await fetch("http://localhost:3001/api/vacaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      alert("Vacaciones registradas correctamente");
-      setShowGenerarVacaciones(false);
-      fetchDiasTomados();
-      console.log("Boleta que se enviará:", body);
-    } catch (error) {
-      console.error("Error al guardar vacaciones:", error);
-    }
-  };
-
   const cards = [
     { id: "colaboradores", title: "Colaboradores", img: "/images/agregar-usuario.png" },
     { id: "vacaciones", title: "Vacaciones", img: "/images/vacaciones.png" },
@@ -269,6 +390,12 @@ export const Dashboard = () => {
     currentPage * rowsPerPage
   );
 
+
+
+  const handleImprimir = useReactToPrint({
+    content: () => componentRef.current,
+  });
+
   const [colaboradorData, setColaboradorData] = useState({
     Nombre: "", Apellidos: "", CedulaID: "", IDColaborador: "", Telefono: "",
     Direccion: "", Contrasena: "", Correo: "", FechaIngreso: "", Empresa: "", Contrato: "", Cuenta: "", SalarioBase: 0
@@ -276,13 +403,23 @@ export const Dashboard = () => {
 
   const verListaFinanciamientos = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/financiamientos");
-      const data = await response.json();
-      console.log("Financiamientos recibidos:", data); // 👈
-      setListaFinanciamientos(data);
-      setShowVerFinanciamientos(true); // 👈 asegúrate que esto se ejecuta
+      // Asegurarse que hay colaborador seleccionado
+      if (!colaboradorSeleccionado || !colaboradorSeleccionado.CedulaID) {
+        console.warn("No hay colaborador seleccionado para cargar financiamientos.");
+        return;
+      }
+
+      const cedula = colaboradorSeleccionado.CedulaID;
+      const localidad = localStorage.getItem("localidad");
+
+      console.log("Cargando financiamientos para:", cedula, "en localidad:", localidad);
+
+      const res = await fetch(`http://localhost:3001/api/financiamientos/${cedula}?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+
+      setFinanciamientos(data);
     } catch (error) {
-      console.error("Error al obtener la lista de financiamientos:", error);
+      console.error("Error al cargar financiamientos:", error);
     }
   };
 
@@ -316,6 +453,21 @@ export const Dashboard = () => {
       }
     } catch (error) {
       console.error("Error al generar el reporte:", error);
+    }
+  };
+
+  const obtenerVacaciones = async () => {
+    try {
+      const cedula = colaboradorSeleccionado?.CedulaID;
+      const localidad = localStorage.getItem("localidad");
+
+      if (!cedula || !localidad) return;
+
+      const res = await fetch(`/api/vacaciones/${cedula}?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setVacacionesHistorial(data);
+    } catch (error) {
+      console.error("Error al obtener historial de vacaciones:", error);
     }
   };
 
@@ -373,7 +525,7 @@ export const Dashboard = () => {
   const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
   const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
 
-  
+
   const [pagoFinanciamientoForm, setPagoFinanciamientoForm] = useState({
     IDFinanciamiento: null,
     Fecha: new Date().toISOString().slice(0, 10),
@@ -398,6 +550,60 @@ export const Dashboard = () => {
       });
     };
     reader.readAsDataURL(file);
+  };
+
+  const imprimirAguinaldo = () => {
+    const elemento = document.getElementById("reporte-aguinaldo");
+
+    const opciones = {
+      margin: 10,
+      filename: `Aguinaldo_${selectedColaborador?.Nombre}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opciones).from(elemento).save();
+  };
+
+  const descargarExcelAguinaldo = () => {
+    if (!selectedColaborador || !pagosDelAguinaldo.length) return;
+
+    const encabezado1 = [`Aguinaldo de ${selectedColaborador.Nombre}`];
+    const encabezado2 = [`Total Aguinaldo: ₡${parseFloat(aguinaldoCalculado).toLocaleString()}`];
+
+    const datos = pagosDelAguinaldo.map(p => [
+      p.FechaRegistro?.slice(0, 10),
+      `₡${parseFloat(p.TotalPago).toLocaleString()}`
+    ]);
+
+    const hojaDatos = [
+      encabezado1,
+      encabezado2,
+      [],
+      ['Fecha', 'Monto'],
+      ...datos
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(hojaDatos);
+
+    // Centrar celdas importantes
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    for (let R = 0; R <= range.e.r; ++R) {
+      for (let C = 0; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cell_address]) continue;
+
+        if (!worksheet[cell_address].s) worksheet[cell_address].s = {};
+        worksheet[cell_address].s.alignment = { horizontal: "center" };
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Aguinaldo");
+
+    // Aplicar estilos (necesita xlsx-style si desea más)
+    XLSX.writeFile(workbook, `Aguinaldo_${selectedColaborador.Nombre}.xlsx`);
   };
 
   const handleSubmit = async (e) => {
@@ -462,18 +668,18 @@ export const Dashboard = () => {
   };
 
   const calcularAguinaldo = async (colaborador) => {
-  setSelectedColaborador(colaborador);
-  try {
-    const localidad = localStorage.getItem("localidad");
-    const res = await fetch(`http://localhost:3001/api/aguinaldo/${colaborador.CedulaID}?localidad=${encodeURIComponent(localidad)}`);
-    const data = await res.json();
-    setAguinaldoCalculado(data.aguinaldo);
-    setPagosDelAguinaldo(data.pagos);
-    setShowAguinaldoModal(true);
-  } catch (err) {
-    console.error("Error al calcular aguinaldo:", err);
-  }
-};
+    setSelectedColaborador(colaborador);
+    try {
+      const localidad = localStorage.getItem("localidad");
+      const res = await fetch(`http://localhost:3001/api/aguinaldo/${colaborador.CedulaID}?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setAguinaldoCalculado(data.aguinaldo);
+      setPagosDelAguinaldo(data.pagos);
+      setShowAguinaldoModal(true);
+    } catch (err) {
+      console.error("Error al calcular aguinaldo:", err);
+    }
+  };
 
   const handlePlanillaModal = async () => {
     try {
@@ -639,6 +845,33 @@ export const Dashboard = () => {
     }
   };
 
+  const exportarColaboradoresAExcel = () => {
+    const datos = colaboradores.map(col => ({
+      Nombre: col.Nombre || "",
+      Apellidos: col.Apellidos || "",
+      Cedula: col.CedulaID || "",
+      Puesto: col.Puesto || "",
+      Telefono: col.Telefono || "",
+      Correo: col.Correo || "",
+      FechaIngreso: col.FechaIngreso ? new Date(col.FechaIngreso).toLocaleDateString() : "",
+      Empresa: col.Empresa || ""
+    }));
+
+    const hoja = XLSX.utils.json_to_sheet(datos);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Colaboradores");
+
+    const excelBuffer = XLSX.write(libro, { bookType: "xlsx", type: "array" });
+    const archivo = new Blob([excelBuffer], { type: "application/octet-stream" });
+
+    saveAs(archivo, `Colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+
+
+
+
+
   const guardarPagoPlanilla = async () => {
     try {
       // 1. Sumamos los montos aplicados
@@ -715,6 +948,8 @@ export const Dashboard = () => {
     }
   };
 
+
+
   const [diasSolicitados, setDiasSolicitados] = useState(0);
   // Estado para días libres
   const [diasLibresSeleccionados, setDiasLibresSeleccionados] = useState([]);
@@ -784,6 +1019,157 @@ export const Dashboard = () => {
     }
   };
 
+  const formatoFecha = (fecha) => {
+    if (!fecha) return "";
+    const f = new Date(fecha);
+    return f.toLocaleDateString("es-CR", { year: "numeric", month: "long", day: "numeric" });
+  };
+
+  const imprimirVale = () => {
+    const contenido = document.getElementById("reporte-vale");
+    if (contenido) {
+      const ventana = window.open("", "_blank");
+      ventana.document.write(`
+      <html>
+        <head>
+          <title>Comprobante de Vale</title>
+          <style>
+            body { font-family: Arial; text-align: center; margin-top: 100px; }
+            h2 { margin-bottom: 30px; }
+            p { font-size: 18px; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          ${contenido.innerHTML}
+        </body>
+      </html>
+    `);
+      ventana.document.close();
+      ventana.print();
+    }
+  };
+
+  // ... Dentro de Dashboard.js o donde tenga su función de guardar boleta
+
+  const handleSubmitVacaciones = async (e) => {
+    e.preventDefault();
+
+    try {
+      const diasTomados = calcularDiasVacaciones(vacacionesForm.FechaSalida, vacacionesForm.FechaEntrada);
+
+      if (!vacacionesForm.NumeroBoleta || vacacionesForm.NumeroBoleta.trim() === "") {
+        alert("Debe ingresar el número de boleta manualmente.");
+        return;
+      }
+
+      const body = {
+        NumeroBoleta: vacacionesForm.NumeroBoleta,
+        CedulaID: selectedColaborador.CedulaID,
+        Nombre: selectedColaborador.Nombre,
+        Apellidos: selectedColaborador.Apellidos, // ⬅️ Añadido
+        FechaIngreso: selectedColaborador.FechaIngreso,
+        FechaSalida: vacacionesForm.FechaSalida,
+        FechaEntrada: vacacionesForm.FechaEntrada,
+        DiasTomados: diasTomados,
+        DiasDisponibles: selectedColaborador.DiasDisponibles, // ⬅️ Añadido
+        Detalle: vacacionesForm.Detalle || "",
+        Empresa: localStorage.getItem("localidad") || "",
+        Usuario: localStorage.getItem("usuario") || "Sistema"
+      };
+
+      const response = await fetch("http://localhost:3001/api/vacaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      const data = await response.json();
+      alert(data.message || "Boleta guardada correctamente");
+
+      const nuevaBoleta = {
+        Nombre: selectedColaborador.Nombre,
+        Apellidos: selectedColaborador.Apellidos, // ⬅️ Añadido
+        CedulaID: selectedColaborador.CedulaID,
+        FechaSalida: vacacionesForm.FechaSalida,
+        FechaEntrada: vacacionesForm.FechaEntrada,
+        Dias: diasTomados, // ⬅️ Por si se requiere
+        DiasDisponibles: selectedColaborador.DiasDisponibles, // ⬅️ Añadido
+        CantidadDias: diasTomados,
+        Detalle: vacacionesForm.Detalle,
+        Usuario: localStorage.getItem("usuario") || "Sistema",
+        NumeroBoleta: vacacionesForm.NumeroBoleta
+      };
+
+      setUltimaBoletaGenerada(nuevaBoleta);
+      setUltimoNumeroBoleta(vacacionesForm.NumeroBoleta);
+      setVacacionesForm({ ...formularioInicial });
+      obtenerVacaciones();
+
+      // Llama inmediatamente a imprimir
+      imprimirBoletaVacaciones(nuevaBoleta);
+
+      setTimeout(() => setShowGenerarVacaciones(false), 1200);
+
+    } catch (error) {
+      console.error("Error al guardar boleta:", error);
+      alert("Error al guardar boleta");
+    }
+  };
+
+  // ⬇️ Dentro del renderizado de la lista de boletas, por ejemplo en una tabla:
+  {
+    vacacionesHistorial.map((boleta, i) => (
+      <tr key={i}>
+        <td>{boleta.Nombre}</td>
+        <td>{boleta.FechaSalida}</td>
+        <td>{boleta.FechaEntrada}</td>
+        <td>{boleta.Detalle}</td>
+        <td>{boleta.Usuario}</td>
+        <td>{botonImprimir(boleta)}</td>
+      </tr>
+    ))
+  }
+
+
+  /// ⬇️ La función de impresión
+  const imprimirBoletaVacaciones = async (boleta) => {
+    try {
+      const localidad = localStorage.getItem("localidad");
+      const encabezadoRes = await fetch(`/api/encabezado-localidad?localidad=${encodeURIComponent(localidad)}`);
+      const encabezado = await encabezadoRes.json();
+
+      const contenido = `
+      <div style="text-align: center; font-family: Arial; font-size: 12px;">
+        <strong>${encabezado.Empresa || ''}</strong><br/>
+        ${encabezado.RazonSocial || ''}<br/>
+        Cédula: ${encabezado.NumeroCedula || ''}<br/>
+        Correo: ${encabezado.Correo || ''}<br/>
+        Tel: ${encabezado.Telefono || ''}<br/>
+        ${encabezado.Direccion || ''}<br/>
+        <hr/>
+        <h3>Boleta de Vacaciones</h3>
+        <p><strong>Número de Boleta:</strong> ${boleta.NumeroBoleta || 'N/A'}</p>
+        <p><strong>Nombre:</strong> ${boleta.Nombre}</p>
+        <p><strong>Cédula:</strong> ${boleta.CedulaID}</p>
+        <p><strong>Fecha Salida:</strong> ${boleta.FechaSalida}</p>
+        <p><strong>Fecha Entrada:</strong> ${boleta.FechaEntrada}</p>
+        <p><strong>Días:</strong> ${boleta.CantidadDias}</p>
+        <p><strong>Detalle:</strong> ${boleta.Detalle}</p>
+        <p><strong>Registrado por:</strong> ${boleta.Usuario}</p>
+        <hr/>
+        <p>Firma Colaborador: ______________________</p>
+      </div>
+    `;
+
+      const ventana = window.open('', '_blank', 'width=600,height=800');
+      ventana.document.write(`<html><head><title>Boleta Vacaciones</title></head><body>${contenido}</body></html>`);
+      ventana.document.close();
+      ventana.focus();
+      ventana.print();
+    } catch (error) {
+      console.error("Error al imprimir boleta:", error);
+    }
+  };
   const descargarPDFColillas = () => {
     const elemento = document.querySelector('.reporte-colillas');
 
@@ -799,18 +1185,29 @@ export const Dashboard = () => {
   };
 
   const obtenerUltimoNumeroBoleta = async () => {
-  try {
-    const res = await fetch(`http://localhost:3001/api/vacaciones/ultimoboleta?localidad=${encodeURIComponent(localidad)}`);
-    const data = await res.json();
+    try {
+      const res = await fetch(`http://localhost:3001/api/vacaciones/ultimoboleta?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
 
-    // Validar que el campo venga definido, si no usar "Ninguno"
-    const numero = data?.NumeroBoleta ?? "Ninguno";
-    setUltimoNumeroBoleta(numero);
-  } catch (error) {
-    console.error("Error al obtener el último número de boleta:", error);
-    setUltimoNumeroBoleta("Error");
-  }
-};
+      // Validar que el campo venga definido, si no usar "Ninguno"
+      const numero = data?.NumeroBoleta ?? "Ninguno";
+      setUltimoNumeroBoleta(numero);
+    } catch (error) {
+      console.error("Error al obtener el último número de boleta:", error);
+      setUltimoNumeroBoleta("Error");
+    }
+  };
+
+
+
+  const botonImprimir = (boleta) => (
+    <button
+      className="btn btn-sm btn-success"
+      onClick={() => generarPDFBoleta(boleta)}
+    >
+      Descargar PDF
+    </button>
+  );
 
   useEffect(() => {
     if (showGenerarVacaciones) {
@@ -1021,10 +1418,19 @@ export const Dashboard = () => {
         return null; // No mostrar formulario aquí si no es en modo CREAR
       default:
         return <p>Selecciona una opción</p>;
+
     }
   };
 
   ///////////////////////////////////////////////
+
+  <div id="reporte-vale" style={{ display: 'none', textAlign: 'center', padding: '40px', fontFamily: 'Arial' }}>
+    <h2>Comprobante de Vale</h2>
+    <p><strong>Nombre:</strong> {selectedColaborador?.Nombre}</p>
+    <p><strong>Fecha:</strong> {formatoFecha(valeForm.FechaRegistro)}</p>
+    <p><strong>Monto:</strong> ₡{parseFloat(valeForm.MontoVale || 0).toLocaleString()}</p>
+    <p><strong>Motivo:</strong> {valeForm.Motivo}</p>
+  </div>
 
   return (
     <div className="dashboard_principal">
@@ -1087,6 +1493,17 @@ export const Dashboard = () => {
       {showVacacionesModal && (
         <div className="modal-overlay" onClick={() => setShowVacacionesModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div style={{ position: "absolute", top: 10, right: 10 }}>
+              <button
+                className="btn btn-sm btn-outline-info"
+                onClick={() => {
+                  obtenerTodasBoletas();
+                  setMostrarModalListadoBoletas(true);
+                }}
+              >
+                Ver Boletas
+              </button>
+            </div>
             <h2>Crear Vacaciones</h2>
             <div className="mb-3 d-flex justify-content-between align-items-center">
               <input
@@ -1151,6 +1568,74 @@ export const Dashboard = () => {
               </button>
             </div>
             <button className="btn btn-secondary mt-3" onClick={() => setShowVacacionesModal(false)}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalListadoBoletas && (
+        <div className="modal-overlay" onClick={() => setMostrarModalListadoBoletas(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Listado de Boletas</h4>
+
+            <input
+              type="text"
+              className="form-control mb-2"
+              placeholder="Buscar por nombre o cédula"
+              value={busquedaBoleta}
+              onChange={(e) => setBusquedaBoleta(e.target.value)}
+            />
+
+            <table className="table table-sm table-striped">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Apellidos</th>
+                  <th>Cédula</th>
+                  <th>Boleta</th>
+                  <th>Salida</th>
+                  <th>Entrada</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boletasPaginadas.map((boleta, i) => (
+                  <tr key={i}>
+                    <td>{boleta.Nombre}</td>
+                     <td>{boleta.Apellidos}</td>
+                    <td>{boleta.CedulaID}</td>
+                    <td>{boleta.NumeroBoleta}</td>
+                    <td>{boleta.FechaSalida?.slice(0, 10)}</td>
+                    <td>{boleta.FechaEntrada?.slice(0, 10)}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => generarPDFBoleta(boleta)}
+                      >
+                        Descargar PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="d-flex justify-content-center mt-2">
+              <button
+                className="btn btn-outline-secondary btn-sm me-2"
+                disabled={paginaBoletas === 1}
+                onClick={() => cambiarPaginaBoletas(paginaBoletas - 1)}
+              >
+                Anterior
+              </button>
+              <span className="mt-1">Página {paginaBoletas}</span>
+              <button
+                className="btn btn-outline-secondary btn-sm ms-2"
+                disabled={paginaBoletas * 5 >= boletasFiltradas.length}
+                onClick={() => cambiarPaginaBoletas(paginaBoletas + 1)}
+              >
+                Siguiente
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1233,20 +1718,11 @@ export const Dashboard = () => {
                 <input
                   type="text"
                   className="form-control"
-                  required
-                />
-              </div>
-              {/* <div className="formulario-item">
-                <label>Número Boleta:</label>
-                <input
-                  type="text"
-                  className="form-control"
                   value={vacacionesForm.NumeroBoleta}
                   onChange={(e) => setVacacionesForm({ ...vacacionesForm, NumeroBoleta: e.target.value })}
                   required
                 />
-              </div> */}
-
+              </div>
               <div className="formulario-item">
                 <label>Cédula:</label>
                 <input type="text" className="form-control" value={selectedColaborador.CedulaID} readOnly />
@@ -1328,10 +1804,6 @@ export const Dashboard = () => {
                 />
               </div>
               <div className="formulario-item">
-                <label>Última Boleta:</label>
-                <input type="text" className="form-control" value={ultimoNumeroBoleta} readOnly />
-              </div>
-              <div className="formulario-item">
                 <label>Empresa:</label>
                 <input
                   type="text"
@@ -1340,12 +1812,16 @@ export const Dashboard = () => {
                   readOnly
                 />
               </div>
+              <div className="formulario-item">
+                <label>Último Número de Boleta:</label>
+                <input type="text" className="form-control" value={ultimoNumeroBoleta || ''} readOnly />
+              </div>
             </div>
 
 
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowGenerarVacaciones(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleGuardarVacaciones}>Guardar Boleta</button>
+              <button className="btn btn-primary" onClick={handleSubmitVacaciones}>Guardar Boleta</button>
             </div>
           </div>
         </div>
@@ -1354,14 +1830,34 @@ export const Dashboard = () => {
       {/* Modal para formularios */}
       {activeCard && !["planilla", "vales", "financiamientos", "vacaciones"].includes(activeCard) && (
 
+
         <div className="modal-overlay " onClick={() => setActiveCard(null)}>
+
+
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+
+            <div className="d-flex justify-content-end mb-3">
+              <button
+                className="btn btn-sm btn-outline-success me-2"
+                onClick={exportarColaboradoresAExcel}
+              >
+                <i className="bi bi-file-earmark-excel"></i>Descargar Excel
+              </button>
+              <button
+                className="btn btn-sm btn-outline-primary"
+                onClick={imprimirColaboradores}
+              >
+                <i className="bi bi-printer"></i> Imprimir
+              </button>
+            </div>
             <h2>{viewMode ? "Ver" : "Crear"} {cards.find((c) => c.id === activeCard)?.title}</h2>
             {renderForm()}
             <button className="btn btn-danger mt-1" onClick={() => { setActiveCard(null); setViewMode(false); }}>
               Cerrar
             </button>
+
           </div>
+
         </div>
       )}
 
@@ -1689,24 +2185,30 @@ export const Dashboard = () => {
       {showAguinaldoModal && (
         <div className="modal-overlay" onClick={() => setShowAguinaldoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Aguinaldo de {selectedColaborador?.Nombre}</h3>
-            <p><strong>Total Aguinaldo: ₡{parseFloat(aguinaldoCalculado).toLocaleString()}</strong></p>
-            <table className="table">
-              <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
-              <tbody>
-  {(pagosDelAguinaldo || []).map((pago, i) => (
-    <tr key={i}>
-      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-      <td>₡{pago.TotalPago.toLocaleString()}</td>
-    </tr>
-  ))}
-</tbody>
-            </table>
-            <button className="btn btn-secondary mt-3" onClick={() => setShowAguinaldoModal(false)}>Cerrar</button>
+            <div id="reporte-aguinaldo" style={{ padding: "20px", textAlign: "center" }}>
+              <h3>Aguinaldo de {selectedColaborador?.Nombre}</h3>
+              <p><strong>Total Aguinaldo: ₡{parseFloat(aguinaldoCalculado).toLocaleString()}</strong></p>
+              <table className="table">
+                <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
+                <tbody>
+                  {pagosDelAguinaldo.map((pago, i) => (
+                    <tr key={i}>
+                      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                      <td>₡{pago.TotalPago.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="d-flex justify-content-between mt-3">
+              <button className="btn btn-primary" onClick={imprimirAguinaldo}>Imprimir PDF</button>
+              <button className="btn btn-success" onClick={descargarExcelAguinaldo}>Descargar Excel</button>
+              <button className="btn btn-secondary" onClick={() => setShowAguinaldoModal(false)}>Cerrar</button>
+            </div>
           </div>
         </div>
       )}
-
       {/* ********************************************* */}
       {showFinanciamientosModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientosModal(false)}>
@@ -1784,7 +2286,8 @@ export const Dashboard = () => {
                   {colaboradores
                     .filter(c =>
                       c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      c.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
+                      c.Nombre.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                      c.Empresa === localStorage.getItem("localidad")
                     )
                     .map((colaborador, idx) => (
                       <option key={idx} value={colaborador.CedulaID}>
@@ -1836,17 +2339,20 @@ export const Dashboard = () => {
                 className="btn btn-primary"
                 onClick={async () => {
                   try {
-                    const localidad = localStorage.getItem("localidad"); // ← aseguramos la localidad
-                    const valeConEmpresa = { ...valeForm, Empresa: localidad }; // ← insertamos Empresa
+                    const localidad = localStorage.getItem("localidad");
+                    const valeConEmpresa = { ...valeForm, Empresa: localidad };
 
                     await fetch("http://localhost:3001/api/vales", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(valeConEmpresa) // ← enviamos con Empresa incluida
+                      body: JSON.stringify(valeConEmpresa)
                     });
 
                     alert("Vale registrado correctamente");
-                    setShowValesModal(false);
+                    imprimirVale(); // Primero imprimimos
+                    setShowValesModal(false); // Luego cerramos el modal
+
+                    // Limpiar formulario
                     setValeForm({
                       CedulaID: "", Nombre: "", FechaRegistro: new Date().toISOString().slice(0, 10),
                       MontoVale: 0, Empresa: "", Motivo: ""
@@ -1858,6 +2364,7 @@ export const Dashboard = () => {
               >
                 Guardar Vale
               </button>
+
             </div>
           </div>
         </div>
@@ -1867,10 +2374,9 @@ export const Dashboard = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>{modoEditarFinanciamiento ? "Editar Financiamiento" : "Crear Financiamiento"}</h3>
 
-            {/* FORMULARIO con validación nativa */}
             <form onSubmit={(e) => {
-              e.preventDefault(); // evita recargar la página
-              guardarFinanciamiento(); // tu función actual
+              e.preventDefault();
+              guardarFinanciamiento();
             }}>
               <div className="formulario-grid-2cols">
                 {/* Columna 1 */}
@@ -1903,8 +2409,9 @@ export const Dashboard = () => {
                         <option value="">Seleccione un colaborador</option>
                         {colaboradores
                           .filter(c =>
-                            c.Nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase())
+                            (c.Nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              c.CedulaID.toLowerCase().includes(searchTerm.toLowerCase())) &&
+                            c.Empresa === localStorage.getItem("localidad") // filtro por localidad
                           )
                           .map((colaborador, i) => (
                             <option key={i} value={colaborador.CedulaID}>
@@ -1985,18 +2492,10 @@ export const Dashboard = () => {
 
               {/* Botones */}
               <div className="text-end mt-3">
-                <button
-                  type="button"
-                  className="btn btn-secondary me-2"
-                  onClick={() => setShowFinanciamientoModal(false)}
-                >
+                <button type="button" className="btn btn-secondary me-2" onClick={() => setShowFinanciamientoModal(false)}>
                   Cancelar
                 </button>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                >
+                <button type="submit" className="btn btn-primary">
                   Guardar
                 </button>
               </div>
@@ -2004,10 +2503,6 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
-
-
-
-
 
       {activeCard === "planilla" && !showCrearPago && (
         <div className="modal-overlay" onClick={() => setActiveCard(null)}>
@@ -2667,6 +3162,12 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <ModalImpresionBoleta
+        mostrar={mostrarModalImpresion}
+        cerrar={() => setMostrarModalImpresion(false)}
+        boleta={ultimaBoletaGenerada}
+      />
     </div>
 
   );

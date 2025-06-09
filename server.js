@@ -247,35 +247,37 @@ app.post("/api/vacaciones", async (req, res) => {
     FechaSalida, FechaEntrada, DiasTomados,
     Detalle, NumeroBoleta, Empresa
   } = req.body;
-  console.log("Boleta recibida:", req.body);
+
+  console.log("Boleta recibida:", req.body); // 👈 Verifica en consola que NumeroBoleta llegue correctamente
+
   try {
-    const pool = await sql.connect(dbConfig); // ← necesario aquí
+    const pool = await sql.connect(dbConfig);
     await pool.request()
-      .input("CedulaID", CedulaID)
-      .input("Nombre", Nombre)
-      .input("FechaIngreso", FechaIngreso)
-      .input("FechaSalida", FechaSalida)
-      .input("FechaEntrada", FechaEntrada)
-      .input("DiasTomados", DiasTomados)
-      .input("Detalle", Detalle)
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre)
+      .input("FechaIngreso", sql.Date, FechaIngreso)
+      .input("FechaSalida", sql.Date, FechaSalida)
+      .input("FechaEntrada", sql.Date, FechaEntrada)
+      .input("DiasTomados", sql.Int, DiasTomados)
+      .input("Detalle", sql.NVarChar, Detalle)
       .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
-      .input("Empresa", sql.NVarChar, Empresa) // ⬅️ agregado
+      .input("Empresa", sql.NVarChar, Empresa)
       .query(`
-    INSERT INTO BoletaVacaciones (
-      CedulaID, Nombre, FechaIngreso,
-      FechaSalida, FechaEntrada, DiasTomados,
-      Detalle, NumeroBoleta, Empresa
-    )
-    VALUES (
-      @CedulaID, @Nombre, @FechaIngreso,
-      @FechaSalida, @FechaEntrada, @DiasTomados,
-      @Detalle, @NumeroBoleta, @Empresa
-    )
-  `);
+        INSERT INTO BoletaVacaciones (
+          CedulaID, Nombre, FechaIngreso,
+          FechaSalida, FechaEntrada, DiasTomados,
+          Detalle, NumeroBoleta, Empresa
+        )
+        VALUES (
+          @CedulaID, @Nombre, @FechaIngreso,
+          @FechaSalida, @FechaEntrada, @DiasTomados,
+          @Detalle, @NumeroBoleta, @Empresa
+        )
+      `);
 
     res.status(200).json({ message: "Boleta guardada exitosamente" });
   } catch (error) {
-    console.error("Error insertando boleta:", error);
+    console.error("❌ Error insertando boleta:", error);
     res.status(500).json({ error: "Error al guardar boleta" });
   }
 });
@@ -537,26 +539,25 @@ app.get('/api/vales/:cedula', async (req, res) => {
   }
 });
 
+// Generar nuevo número de boleta formato NB001, NB002, ...
 app.get("/api/vacaciones/numeroboleta", async (req, res) => {
   try {
-    const result = await pool
-      .request()
-      .query("SELECT TOP 1 NumeroBoleta FROM BoletaVacaciones ORDER BY ID DESC");
+    const pool = await sql.connect(dbConfig);
 
-    let ultimoNumero = result.recordset.length > 0 ? result.recordset[0].NumeroBoleta : null;
+    const result = await pool.request().query(`
+      SELECT TOP 1 NumeroBoleta
+      FROM BoletaVacaciones
+      ORDER BY ID DESC
+    `);
 
-    let nuevoNumero;
-    if (ultimoNumero && ultimoNumero.startsWith("NB")) {
-      const numero = parseInt(ultimoNumero.substring(2)) + 1;
-      nuevoNumero = `NB${numero.toString().padStart(3, '0')}`;
-    } else {
-      nuevoNumero = "NB001"; // Valor inicial si no hay registros
-    }
+    let ultimoNumero = result.recordset[0]?.NumeroBoleta || "NB000";
+    let numero = parseInt(ultimoNumero.replace("NB", ""), 10) + 1;
+    let nuevoNumero = `NB${numero.toString().padStart(3, "0")}`;
 
     res.json({ numeroBoleta: nuevoNumero });
   } catch (error) {
     console.error("Error generando número de boleta:", error);
-    res.status(500).json({ error: "Error interno generando número de boleta" });
+    res.status(500).json({ error: "Error al generar número de boleta" });
   }
 });
 
@@ -1053,5 +1054,54 @@ app.get("/api/vacaciones/ultimoboleta", async (req, res) => {
   } catch (error) {
     console.error("Error al obtener el último número de boleta:", error);
     res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+app.get("/api/localidades/:nombre", async (req, res) => {
+  const nombre = req.params.nombre;
+  const pool = await sql.connect(dbConfig);
+  const result = await pool.request()
+    .input("Empresa", sql.NVarChar, nombre)
+    .query("SELECT * FROM Localidades WHERE Empresa = @Empresa");
+
+  if (result.recordset.length > 0) {
+    res.json(result.recordset[0]);
+  } else {
+    res.status(404).json({ message: "No se encontró la localidad" });
+  }
+});
+
+app.get('/api/boletas-vacaciones', async (req, res) => {
+  try {
+    const { localidad } = req.query;
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Empresa", sql.NVarChar, localidad)
+      .query("SELECT * FROM BoletaVacaciones WHERE Empresa = @Empresa ORDER BY FechaSalida DESC");
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error al obtener boletas:", error);
+    res.status(500).json({ error: "Error al obtener boletas" });
+  }
+});
+
+// Endpoint para obtener datos del encabezado de boleta
+app.get("/api/encabezado-localidad", async (req, res) => {
+  const localidad = req.query.localidad;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Localidad", sql.NVarChar, localidad)
+      .query("SELECT TOP 1 * FROM Localidades WHERE Nombre = @Localidad");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Localidad no encontrada" });
+    }
+
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error("Error en /api/encabezado-localidad:", error);
+    res.status(500).json({ message: "Error al obtener encabezado" });
   }
 });
