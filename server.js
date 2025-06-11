@@ -138,20 +138,6 @@ app.get('/api/colaboradores', async (req, res) => {
   }
 });
 
-// GET - Obtener todos los colaboradores / Trea colaboradores funcional
-// app.get('/api/colaboradores', async (req, res) => {
-//   try {
-//     const pool = await sql.connect(dbConfig);
-//     const result = await pool.request().query(
-//       `SELECT ID, Nombre, Apellidos, CedulaID, Telefono, Direccion, Contrasena, Correo, FechaIngreso, Empresa,Foto, IDColaborador, Contrato, Cuenta, SalarioBase FROM Colaboradores`
-//     );
-//     res.status(200).json(result.recordset);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-
-
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
@@ -241,20 +227,34 @@ app.delete('/api/financiamientos/:id', async (req, res) => {
 });
 
 // POST - Guardar boleta de vacaciones
-app.post("/api/vacaciones", async (req, res) => {
-  const {
-    CedulaID, Nombre, FechaIngreso,
-    FechaSalida, FechaEntrada, DiasTomados,
-    Detalle, NumeroBoleta, Empresa
-  } = req.body;
-
-  console.log("Boleta recibida:", req.body); // 👈 Verifica en consola que NumeroBoleta llegue correctamente
-
+app.post('/api/vacaciones', async (req, res) => {
   try {
+    const {
+      CedulaID,
+      Nombre,
+      FechaIngreso,
+      FechaSalida,
+      FechaEntrada,
+      DiasTomados,
+      Detalle,
+      NumeroBoleta,
+      Empresa,
+    } = req.body;
+
     const pool = await sql.connect(dbConfig);
+
+    // Buscar apellidos desde la tabla Colaboradores
+    const resultado = await pool.request()
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .query("SELECT Apellidos FROM Colaboradores WHERE CedulaID = @CedulaID");
+
+    const Apellidos = resultado.recordset[0]?.Apellidos || '';
+
+    // Insertar la boleta de vacaciones
     await pool.request()
       .input("CedulaID", sql.NVarChar, CedulaID)
       .input("Nombre", sql.NVarChar, Nombre)
+      .input("Apellidos", sql.NVarChar, Apellidos)
       .input("FechaIngreso", sql.Date, FechaIngreso)
       .input("FechaSalida", sql.Date, FechaSalida)
       .input("FechaEntrada", sql.Date, FechaEntrada)
@@ -262,23 +262,18 @@ app.post("/api/vacaciones", async (req, res) => {
       .input("Detalle", sql.NVarChar, Detalle)
       .input("NumeroBoleta", sql.NVarChar, NumeroBoleta)
       .input("Empresa", sql.NVarChar, Empresa)
+      // .input("Usuario", sql.NVarChar, Usuario)
       .query(`
-        INSERT INTO BoletaVacaciones (
-          CedulaID, Nombre, FechaIngreso,
-          FechaSalida, FechaEntrada, DiasTomados,
-          Detalle, NumeroBoleta, Empresa
-        )
-        VALUES (
-          @CedulaID, @Nombre, @FechaIngreso,
-          @FechaSalida, @FechaEntrada, @DiasTomados,
-          @Detalle, @NumeroBoleta, @Empresa
-        )
+        INSERT INTO BoletaVacaciones 
+        (CedulaID, Nombre, Apellidos, FechaIngreso, FechaSalida, FechaEntrada, DiasTomados, Detalle, NumeroBoleta, Empresa)
+        VALUES 
+        (@CedulaID, @Nombre, @Apellidos, @FechaIngreso, @FechaSalida, @FechaEntrada, @DiasTomados, @Detalle, @NumeroBoleta, @Empresa)
       `);
 
-    res.status(200).json({ message: "Boleta guardada exitosamente" });
+    res.status(200).json({ message: "Boleta registrada correctamente." });
   } catch (error) {
-    console.error("❌ Error insertando boleta:", error);
-    res.status(500).json({ error: "Error al guardar boleta" });
+    console.error("❌ Error al registrar boleta:", error);
+    res.status(500).json({ message: "Error al registrar boleta." });
   }
 });
 
@@ -624,6 +619,26 @@ app.put('/api/financiamientos/:id', async (req, res) => {
   } catch (error) {
     console.error("Error al actualizar financiamiento:", error);
     res.status(500).json({ error: 'Error al actualizar financiamiento' });
+  }
+});
+
+app.get("/api/vacaciones", async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Empresa", sql.NVarChar, req.query.localidad || '')
+      .query(`
+        SELECT Nombre, Apellidos, CedulaID, FechaSalida, FechaEntrada,
+               Detalle, NumeroBoleta, DiasTomados AS Dias, DiasDisponibles
+        FROM BoletaVacaciones
+        WHERE Empresa = @Empresa
+        ORDER BY FechaSalida DESC
+      `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("❌ Error obteniendo boletas:", err);
+    res.status(500).json({ message: "Error al obtener boletas" });
   }
 });
 

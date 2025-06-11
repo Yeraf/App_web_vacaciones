@@ -126,29 +126,28 @@ export const Dashboard = () => {
     }
   };
 
- const ContenedorImpresionBoleta = forwardRef(({ boleta }, ref) => {
-  return (
-    <div ref={ref} style={{ width: "72mm", padding: "5px", fontSize: "12px", fontFamily: "monospace" }}>
-      <EncabezadoEmpresa />
-      <div style={{ textAlign: "center", marginTop: "10px" }}>
-        <h5 style={{ fontWeight: "bold" }}>BOLETA DE VACACIONES</h5>
-        <p><strong>Colaborador:</strong> {boleta.Nombre} {boleta.Apellidos || ''}</p>
-        <p><strong>Apellidos:</strong> {boleta.Apellidos}</p>
-        <p><strong>Cédula:</strong> {boleta.CedulaID}</p>
-        <p><strong>Desde:</strong> {new Date(boleta.FechaSalida).toLocaleDateString()}</p>
-        <p><strong>Hasta:</strong> {new Date(boleta.FechaEntrada).toLocaleDateString()}</p>
-        <p><strong>Días solicitados:</strong> {boleta.Dias || boleta.DiasTomados || boleta.CantidadDias || 'N/D'}</p>
-        <p><strong>Motivo:</strong> {boleta.Detalle}</p>
-        <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
-
-        {/* Días disponibles */}
-        {boleta.DiasDisponibles !== undefined && (
-          <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> {boleta.DiasDisponibles}</p>
-        )}
+  const ContenedorImpresionBoleta = forwardRef(({ boleta }, ref) => {
+    return (
+      <div ref={ref} style={{ width: "72mm", padding: "5px", fontSize: "12px", fontFamily: "monospace" }}>
+        <EncabezadoEmpresa />
+        <div style={{ textAlign: "center", marginTop: "10px" }}>
+          <h5 style={{ fontWeight: "bold" }}>BOLETA DE VACACIONES</h5>
+          <p><strong>Colaborador:</strong> {boleta.Nombre} {boleta.Apellidos || ''}</p>
+          <p><strong>Apellidos:</strong> {boleta.Apellidos}</p>
+          <p><strong>Cédula:</strong> {boleta.CedulaID}</p>
+          <p><strong>Desde:</strong> {new Date(boleta.FechaSalida).toLocaleDateString()}</p>
+          <p><strong>Hasta:</strong> {new Date(boleta.FechaEntrada).toLocaleDateString()}</p>
+          <p><strong>Días solicitados:</strong> {boleta.Dias || boleta.DiasTomados || boleta.CantidadDias || 'N/D'}</p>
+          <p><strong>Motivo:</strong> {boleta.Detalle}</p>
+          <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
+          {/* Días disponibles */}
+          {boleta.DiasDisponibles !== undefined && (
+            <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> {boleta.DiasDisponibles}</p>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  });
 
 
 
@@ -1121,6 +1120,7 @@ export const Dashboard = () => {
     vacacionesHistorial.map((boleta, i) => (
       <tr key={i}>
         <td>{boleta.Nombre}</td>
+        <td>{boleta.Apellidos}</td>
         <td>{boleta.FechaSalida}</td>
         <td>{boleta.FechaEntrada}</td>
         <td>{boleta.Detalle}</td>
@@ -1594,6 +1594,7 @@ export const Dashboard = () => {
                   <th>Boleta</th>
                   <th>Salida</th>
                   <th>Entrada</th>
+                  {/* <th>Dias</th> */}
                   <th>Acción</th>
                 </tr>
               </thead>
@@ -1601,15 +1602,20 @@ export const Dashboard = () => {
                 {boletasPaginadas.map((boleta, i) => (
                   <tr key={i}>
                     <td>{boleta.Nombre}</td>
-                     <td>{boleta.Apellidos}</td>
+                    <td>{boleta.Apellidos}</td>
                     <td>{boleta.CedulaID}</td>
                     <td>{boleta.NumeroBoleta}</td>
                     <td>{boleta.FechaSalida?.slice(0, 10)}</td>
                     <td>{boleta.FechaEntrada?.slice(0, 10)}</td>
+                    {/* <td>{boleta.DiasDisponibles}</td> */}
                     <td>
                       <button
                         className="btn btn-sm btn-success"
-                        onClick={() => generarPDFBoleta(boleta)}
+                        onClick={() => {
+                          const { diasDisponibles } = calcularDias(boleta.FechaIngreso, boleta.CedulaID);
+                          const boletaConDias = { ...boleta, DiasDisponibles: diasDisponibles };
+                          generarPDFBoleta(boletaConDias);
+                        }}
                       >
                         Descargar PDF
                       </button>
