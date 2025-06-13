@@ -1,10 +1,14 @@
 require('dotenv').config();
 const express = require('express');
+const app = express();
 const sql = require('mssql');
 const cors = require('cors');
+app.use(cors());
 
-const app = express();
 const PORT = process.env.PORT || 3001;
+
+app.use(cors()); // 👈 permite solicitudes entre localhost:3000 ↔ 3001
+app.use(express.json());
 
 // ✅ Define primero las opciones CORS
 const corsOptions = {
@@ -12,6 +16,26 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type'],
 };
+
+app.get("/api/vacaciones/ultimo-numero", async (req, res) => {
+  const localidad = req.query.localidad || '';
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Empresa", sql.NVarChar, localidad)
+      .query(`
+        SELECT TOP 1 NumeroBoleta
+        FROM BoletaVacaciones
+        WHERE Empresa = @Empresa
+        ORDER BY ID DESC
+      `);
+    const ultimo = result.recordset[0]?.NumeroBoleta || 'NINGUNO';
+    res.json({ ultimo });
+  } catch (error) {
+    console.error("❌ Error al obtener último número:", error);
+    res.status(500).json({ message: "Error interno" });
+  }
+});
 
 // ✅ Luego aplica los middlewares
 app.use(cors(corsOptions));
@@ -1120,3 +1144,4 @@ app.get("/api/encabezado-localidad", async (req, res) => {
     res.status(500).json({ message: "Error al obtener encabezado" });
   }
 });
+

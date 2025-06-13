@@ -114,6 +114,29 @@ export const Dashboard = () => {
     obtenerNumeroBoleta();
   }, []);
 
+
+  useEffect(() => {
+    if (showGenerarVacaciones) {
+      const localidad = localStorage.getItem("localidad");
+      fetch(`http://localhost:3001/api/vacaciones/ultimo-numero?localidad=${encodeURIComponent(localidad)}`)
+        .then(res => res.json())
+        .then(data => {
+          const nuevoNumero = data.ultimo || "NINGUNO";
+          setUltimoNumeroBoleta(nuevoNumero);
+
+          // ✅ También actualiza el form automáticamente
+          setVacacionesForm((prev) => ({
+            ...prev,
+            NumeroBoleta: nuevoNumero
+          }));
+        })
+        .catch(err => {
+          console.error("Error obteniendo último número:", err);
+          setUltimoNumeroBoleta("NINGUNO");
+        });
+    }
+  }, [showGenerarVacaciones]);
+
   const verDetalleVacaciones = async (cedula) => {
     try {
       const localidad = localStorage.getItem("localidad");
@@ -190,13 +213,36 @@ export const Dashboard = () => {
 
 
   const imprimirColaboradores = () => {
-    const ventana = window.open("", "_blank");
-    const contenido = `
+  const localidad = localStorage.getItem("localidad") || "";
+
+  const colaboradoresFiltrados = colaboradores.filter(c => c.Empresa === localidad);
+
+  if (colaboradoresFiltrados.length === 0) {
+    alert("No hay colaboradores registrados para esta empresa.");
+    return;
+  }
+
+  const ventana = window.open("", "_blank");
+
+  if (!ventana) {
+    alert("Habilite los pop-ups del navegador para imprimir.");
+    return;
+  }
+
+  const contenido = `
     <html>
-    <head><title>Listado de Colaboradores</title></head>
+    <head>
+      <title>Listado de Colaboradores</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+      </style>
+    </head>
     <body>
       <h2 style="text-align:center">Listado de Colaboradores</h2>
-      <table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
+      <table>
         <thead>
           <tr>
             <th>Nombre</th>
@@ -210,29 +256,33 @@ export const Dashboard = () => {
           </tr>
         </thead>
         <tbody>
-          ${colaboradores.map(c => `
+          ${colaboradoresFiltrados.map(c => `
             <tr>
-              <td>${c.Nombre}</td>
-              <td>${c.Apellidos}</td>
-              <td>${c.CedulaID}</td>
+              <td>${c.Nombre || ""}</td>
+              <td>${c.Apellidos || ""}</td>
+              <td>${c.CedulaID || ""}</td>
               <td>${c.Puesto || ""}</td>
               <td>${c.Telefono || ""}</td>
               <td>${c.Correo || ""}</td>
               <td>${c.FechaIngreso ? new Date(c.FechaIngreso).toLocaleDateString() : ""}</td>
-              <td>${c.Empresa}</td>
+              <td>${c.Empresa || ""}</td>
             </tr>
           `).join("")}
         </tbody>
       </table>
-      <br>
-      <button onclick="window.print()">Imprimir</button>
+      <script>
+        window.onload = function() {
+          window.print();
+        }
+      </script>
     </body>
     </html>
   `;
 
-    ventana.document.write(contenido);
-    ventana.document.close();
-  };
+  ventana.document.open();
+  ventana.document.write(contenido);
+  ventana.document.close();
+};
 
   const ImpresionBoletaVacaciones = forwardRef(({ boleta }, ref) => {
     return (
@@ -844,27 +894,62 @@ export const Dashboard = () => {
     }
   };
 
-  const exportarColaboradoresAExcel = () => {
-    const datos = colaboradores.map(col => ({
-      Nombre: col.Nombre || "",
-      Apellidos: col.Apellidos || "",
-      Cedula: col.CedulaID || "",
-      Puesto: col.Puesto || "",
-      Telefono: col.Telefono || "",
-      Correo: col.Correo || "",
-      FechaIngreso: col.FechaIngreso ? new Date(col.FechaIngreso).toLocaleDateString() : "",
-      Empresa: col.Empresa || ""
-    }));
+  const exportarColaboradoresAExcel = async () => {
+    try {
+      const localidad = localStorage.getItem("localidad");
+      const res = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
+      const colaboradores = await res.json();
 
-    const hoja = XLSX.utils.json_to_sheet(datos);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "Colaboradores");
+      if (!Array.isArray(colaboradores) || colaboradores.length === 0) {
+        alert("No hay colaboradores para exportar.");
+        return;
+      }
 
-    const excelBuffer = XLSX.write(libro, { bookType: "xlsx", type: "array" });
-    const archivo = new Blob([excelBuffer], { type: "application/octet-stream" });
+      const datos = colaboradores.map(col => ({
+        Nombre: col.Nombre || "",
+        Apellidos: col.Apellidos || "",
+        Cedula: col.CedulaID || "",
+        Telefono: col.Telefono || "",
+        Correo: col.Correo || "",
+        FechaIngreso: col.FechaIngreso ? new Date(col.FechaIngreso).toLocaleDateString() : "",
+        Empresa: col.Empresa || ""
+      }));
 
-    saveAs(archivo, `Colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const hoja = XLSX.utils.json_to_sheet(datos);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Colaboradores");
+
+      const excelBuffer = XLSX.write(libro, { bookType: "xlsx", type: "array" });
+      const archivo = new Blob([excelBuffer], { type: "application/octet-stream" });
+
+      saveAs(archivo, `Colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (error) {
+      console.error("❌ Error al exportar colaboradores:", error);
+      alert("Ocurrió un error al exportar el Excel.");
+    }
   };
+
+  // const exportarColaboradoresAExcel = () => {
+  //   const datos = colaboradores.map(col => ({
+  //     Nombre: col.Nombre || "",
+  //     Apellidos: col.Apellidos || "",
+  //     Cedula: col.CedulaID || "",
+  //     Puesto: col.Puesto || "",
+  //     Telefono: col.Telefono || "",
+  //     Correo: col.Correo || "",
+  //     FechaIngreso: col.FechaIngreso ? new Date(col.FechaIngreso).toLocaleDateString() : "",
+  //     Empresa: col.Empresa || ""
+  //   }));
+
+  //   const hoja = XLSX.utils.json_to_sheet(datos);
+  //   const libro = XLSX.utils.book_new();
+  //   XLSX.utils.book_append_sheet(libro, hoja, "Colaboradores");
+
+  //   const excelBuffer = XLSX.write(libro, { bookType: "xlsx", type: "array" });
+  //   const archivo = new Blob([excelBuffer], { type: "application/octet-stream" });
+
+  //   saveAs(archivo, `Colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  // };
 
 
 
@@ -1712,10 +1797,14 @@ export const Dashboard = () => {
         </div>
       )}
 
+
+
       {showGenerarVacaciones && selectedColaborador && (
         <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Boleta de Vacaciones</h3>
+
+
 
             <div className="formulario-grid-3cols">
 
@@ -1820,7 +1909,12 @@ export const Dashboard = () => {
               </div>
               <div className="formulario-item">
                 <label>Último Número de Boleta:</label>
-                <input type="text" className="form-control" value={ultimoNumeroBoleta || ''} readOnly />
+                <input
+                  type="text"
+                  className="form-control"
+                  value={vacacionesForm.NumeroBoleta}
+                  readOnly
+                />
               </div>
             </div>
 
@@ -1831,7 +1925,10 @@ export const Dashboard = () => {
             </div>
           </div>
         </div>
+
       )}
+
+
 
       {/* Modal para formularios */}
       {activeCard && !["planilla", "vales", "financiamientos", "vacaciones"].includes(activeCard) && (
@@ -3175,6 +3272,7 @@ export const Dashboard = () => {
         boleta={ultimaBoletaGenerada}
       />
     </div>
+
 
   );
 };
