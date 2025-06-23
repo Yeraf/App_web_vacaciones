@@ -1145,3 +1145,22 @@ app.get("/api/encabezado-localidad", async (req, res) => {
   }
 });
 
+app.get("/api/financiamientos-localidad", async (req, res) => {
+  try {
+    const localidad = req.query.localidad;
+    const pool = await sql.connect(dbConfig);
+
+    const result = await pool.request()
+      .input("Localidad", sql.NVarChar, localidad)
+      .query(`
+        SELECT * FROM Financiamientos
+        WHERE Localidad = @Localidad
+        ORDER BY FechaCreacion DESC
+      `);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error al obtener financiamientos por localidad:", error);
+    res.status(500).json({ error: "Error al obtener financiamientos por localidad" });
+  }
+});

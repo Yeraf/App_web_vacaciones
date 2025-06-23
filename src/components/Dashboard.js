@@ -7,6 +7,8 @@ import { useRef } from 'react';
 import { useReactToPrint } from "react-to-print";
 import { ModalImpresionBoleta } from './ModalImpresionBoleta';
 import { generarPDFBoleta } from './ContenedorImpresionBoleta';
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
@@ -68,9 +70,12 @@ export const Dashboard = () => {
   const [paginaBoletas, setPaginaBoletas] = useState(1);
   const [mostrarModalListadoBoletas, setMostrarModalListadoBoletas] = useState(false);
   const [mostrarModalImpresion, setMostrarModalImpresion] = useState(false);
+  const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
+  const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
+  const [showListaFinanciamientos, setShowListaFinanciamientos] = useState(false);
+
   const boletasPorPagina = 5;
   const rowsPerPage = 5;
-
   const componentRef = useRef();
   const formularioInicial = {
     Contrato: "",
@@ -136,6 +141,18 @@ export const Dashboard = () => {
         });
     }
   }, [showGenerarVacaciones]);
+
+  useEffect(() => {
+    const localidad = localStorage.getItem("localidad");
+    fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setColaboradores(data); // 👈 Este array lo usamos en Excel, PDF e Imprimir
+      })
+      .catch((err) => {
+        console.error("Error al cargar colaboradores:", err);
+      });
+  }, []);
 
   const verDetalleVacaciones = async (cedula) => {
     try {
@@ -213,36 +230,18 @@ export const Dashboard = () => {
 
 
   const imprimirColaboradores = () => {
-  const localidad = localStorage.getItem("localidad") || "";
+    if (!colaboradores || colaboradores.length === 0) {
+      alert("No hay colaboradores disponibles.");
+      return;
+    }
 
-  const colaboradoresFiltrados = colaboradores.filter(c => c.Empresa === localidad);
-
-  if (colaboradoresFiltrados.length === 0) {
-    alert("No hay colaboradores registrados para esta empresa.");
-    return;
-  }
-
-  const ventana = window.open("", "_blank");
-
-  if (!ventana) {
-    alert("Habilite los pop-ups del navegador para imprimir.");
-    return;
-  }
-
-  const contenido = `
+    const ventana = window.open("", "_blank");
+    const contenido = `
     <html>
-    <head>
-      <title>Listado de Colaboradores</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-      </style>
-    </head>
+    <head><title>Listado de Colaboradores</title></head>
     <body>
       <h2 style="text-align:center">Listado de Colaboradores</h2>
-      <table>
+      <table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
         <thead>
           <tr>
             <th>Nombre</th>
@@ -256,7 +255,7 @@ export const Dashboard = () => {
           </tr>
         </thead>
         <tbody>
-          ${colaboradoresFiltrados.map(c => `
+          ${colaboradores.map(c => `
             <tr>
               <td>${c.Nombre || ""}</td>
               <td>${c.Apellidos || ""}</td>
@@ -270,19 +269,15 @@ export const Dashboard = () => {
           `).join("")}
         </tbody>
       </table>
-      <script>
-        window.onload = function() {
-          window.print();
-        }
-      </script>
+      <br>
+      <button onclick="window.print()">Imprimir</button>
     </body>
     </html>
   `;
 
-  ventana.document.open();
-  ventana.document.write(contenido);
-  ventana.document.close();
-};
+    ventana.document.write(contenido);
+    ventana.document.close();
+  };
 
   const ImpresionBoletaVacaciones = forwardRef(({ boleta }, ref) => {
     return (
@@ -302,6 +297,50 @@ export const Dashboard = () => {
       </div>
     );
   });
+
+  const exportarColaboradoresAPDF = () => {
+    if (!colaboradores || colaboradores.length === 0) {
+      alert("No hay colaboradores disponibles.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text("Listado de Colaboradores", 105, 15, { align: "center" });
+
+    const columnas = [
+      "Nombre",
+      "Apellidos",
+      "Cédula",
+      "Puesto",
+      "Teléfono",
+      "Correo",
+      "Fecha Ingreso",
+      "Empresa"
+    ];
+
+    const filas = colaboradores.map(c => [
+      c.Nombre || "",
+      c.Apellidos || "",
+      c.CedulaID || "",
+      c.Puesto || "",
+      c.Telefono || "",
+      c.Correo || "",
+      c.FechaIngreso ? new Date(c.FechaIngreso).toLocaleDateString() : "",
+      c.Empresa || ""
+    ]);
+
+    doc.autoTable({
+      head: [columnas],
+      body: filas,
+      startY: 25,
+      styles: { fontSize: 10 },
+      margin: { left: 10, right: 10 }
+    });
+
+    doc.save(`Colaboradores_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
 
   // export default ImpresionBoletaVacaciones;
   const handleVacacionesModal = async () => {
@@ -364,7 +403,7 @@ export const Dashboard = () => {
   const calcularDiasVacaciones = (inicio, fin) => {
     const f1 = new Date(inicio);
     const f2 = new Date(fin);
-    return Math.floor((f2 - f1) / (1000 * 60 * 60 * 24));
+    return Math.floor((f2 - f1) / (1000 * 60 * 60 * 24)) + 1;
   };
 
   const generarNumeroBoleta = async () => {
@@ -451,26 +490,17 @@ export const Dashboard = () => {
   });
 
   const verListaFinanciamientos = async () => {
-    try {
-      // Asegurarse que hay colaborador seleccionado
-      if (!colaboradorSeleccionado || !colaboradorSeleccionado.CedulaID) {
-        console.warn("No hay colaborador seleccionado para cargar financiamientos.");
-        return;
-      }
+  try {
+    const localidad = localStorage.getItem("localidad");
+    const res = await fetch(`http://localhost:3001/api/financiamientos-localidad?localidad=${encodeURIComponent(localidad)}`);
+    const data = await res.json();
 
-      const cedula = colaboradorSeleccionado.CedulaID;
-      const localidad = localStorage.getItem("localidad");
-
-      console.log("Cargando financiamientos para:", cedula, "en localidad:", localidad);
-
-      const res = await fetch(`http://localhost:3001/api/financiamientos/${cedula}?localidad=${encodeURIComponent(localidad)}`);
-      const data = await res.json();
-
-      setFinanciamientos(data);
-    } catch (error) {
-      console.error("Error al cargar financiamientos:", error);
-    }
-  };
+    setListaFinanciamientos(data);
+    setShowVerFinanciamientos(true); // 👈 abre el modal después de tener la data
+  } catch (error) {
+    console.error("Error al cargar financiamientos:", error);
+  }
+};
 
   const verAbonos = async (financiamientoID) => {
     try {
@@ -571,9 +601,15 @@ export const Dashboard = () => {
     }
   };
 
-  const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
-  const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
-
+  const abrirModalAplicarPago = (financiamiento) => {
+    setFinanciamientoSeleccionado(financiamiento);
+    setPagoForm({
+      FechaPago: new Date().toISOString().slice(0, 10),
+      MontoAplicado: 0,
+      Observaciones: "",
+    });
+    setShowAplicarPagoModal(true);
+  };
 
   const [pagoFinanciamientoForm, setPagoFinanciamientoForm] = useState({
     IDFinanciamiento: null,
@@ -928,33 +964,6 @@ export const Dashboard = () => {
       alert("Ocurrió un error al exportar el Excel.");
     }
   };
-
-  // const exportarColaboradoresAExcel = () => {
-  //   const datos = colaboradores.map(col => ({
-  //     Nombre: col.Nombre || "",
-  //     Apellidos: col.Apellidos || "",
-  //     Cedula: col.CedulaID || "",
-  //     Puesto: col.Puesto || "",
-  //     Telefono: col.Telefono || "",
-  //     Correo: col.Correo || "",
-  //     FechaIngreso: col.FechaIngreso ? new Date(col.FechaIngreso).toLocaleDateString() : "",
-  //     Empresa: col.Empresa || ""
-  //   }));
-
-  //   const hoja = XLSX.utils.json_to_sheet(datos);
-  //   const libro = XLSX.utils.book_new();
-  //   XLSX.utils.book_append_sheet(libro, hoja, "Colaboradores");
-
-  //   const excelBuffer = XLSX.write(libro, { bookType: "xlsx", type: "array" });
-  //   const archivo = new Blob([excelBuffer], { type: "application/octet-stream" });
-
-  //   saveAs(archivo, `Colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
-  // };
-
-
-
-
-
 
   const guardarPagoPlanilla = async () => {
     try {
@@ -1952,6 +1961,12 @@ export const Dashboard = () => {
               >
                 <i className="bi bi-printer"></i> Imprimir
               </button>
+              <button
+                className="btn btn-sm btn-outline-danger pdf-colaboradores"
+                onClick={exportarColaboradoresAPDF}
+              >
+                <i className="bi bi-file-earmark-pdf"></i> Descargar PDF
+              </button>
             </div>
             <h2>{viewMode ? "Ver" : "Crear"} {cards.find((c) => c.id === activeCard)?.title}</h2>
             {renderForm()}
@@ -2767,12 +2782,6 @@ export const Dashboard = () => {
               <button className="btn btn-outline-primary me-2" onClick={() => window.print()}>
                 Imprimir
               </button>
-            </div>
-            <div className="text-end mt-3">
-
-              {/* <button className="btn btn-secondary" onClick={() => setShowReporteModal(false)}>
-              Cerrar
-            </button> */}
             </div>
           </div>
 
