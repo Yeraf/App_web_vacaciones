@@ -490,17 +490,17 @@ export const Dashboard = () => {
   });
 
   const verListaFinanciamientos = async () => {
-  try {
-    const localidad = localStorage.getItem("localidad");
-    const res = await fetch(`http://localhost:3001/api/financiamientos-localidad?localidad=${encodeURIComponent(localidad)}`);
-    const data = await res.json();
+    try {
+      const localidad = localStorage.getItem("localidad");
+      const res = await fetch(`http://localhost:3001/api/financiamientos-localidad?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
 
-    setListaFinanciamientos(data);
-    setShowVerFinanciamientos(true); // 👈 abre el modal después de tener la data
-  } catch (error) {
-    console.error("Error al cargar financiamientos:", error);
-  }
-};
+      setListaFinanciamientos(data);
+      setShowVerFinanciamientos(true); // 👈 abre el modal después de tener la data
+    } catch (error) {
+      console.error("Error al cargar financiamientos:", error);
+    }
+  };
 
   const verAbonos = async (financiamientoID) => {
     try {
@@ -966,74 +966,75 @@ export const Dashboard = () => {
   };
 
   const guardarPagoPlanilla = async () => {
-    try {
-      // 1. Sumamos los montos aplicados
-      let valesTotal = pagoForm.Vales;
-      let prestamosTotal = pagoForm.Prestamos;
+  try {
+    // 1. Sumamos los montos aplicados
+    let valesTotal = pagoForm.Vales;
+    let prestamosTotal = pagoForm.Prestamos;
 
-      for (const p of pendientesAplicados) {
-        if (p.tipo === "Vale") valesTotal += p.monto;
-        if (p.tipo === "Financiamiento") prestamosTotal += p.monto;
-      }
-
-      const totalPagar = calcularPagoTotal({
-        ...pagoForm,
-        Vales: valesTotal,
-        Prestamos: prestamosTotal
-      });
-
-      const body = {
-        CedulaID: selectedColaborador.CedulaID,
-        Nombre: selectedColaborador.Nombre,
-        FechaIngreso: selectedColaborador.FechaIngreso,
-        ...pagoForm,
-        Vales: valesTotal,
-        Prestamos: prestamosTotal,
-        TotalPago: totalPagar
-      };
-
-      // 2. Guardar pago
-      let response = await fetch("http://localhost:3001/api/pago-planilla", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      // 3. Eliminar pendientes aplicados
-      for (const p of pendientesAplicados) {
-        if (p.tipo === "Vale") {
-          await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
-        } else if (p.tipo === "Financiamiento") {
-          await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
-        }
-      }
-
-      alert("Pago guardado y pendientes aplicados correctamente");
-      setShowCrearPago(false);
-      setPendientesAplicados([]); // limpiar
-      setPagoForm({ ...formularioInicial }); // limpiar
-
-      if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
-
-    } catch (error) {
-      console.error("Error al guardar pago y aplicar pendientes:", error);
+    for (const p of pendientesAplicados) {
+      if (p.tipo === "Vale") valesTotal += p.monto;
+      if (p.tipo === "Financiamiento") prestamosTotal += p.monto;
     }
-    // 3. Aplicar pendientes y registrar pagos
+
+    const totalPagar = calcularPagoTotal({
+      ...pagoForm,
+      Vales: valesTotal,
+      Prestamos: prestamosTotal
+    });
+
+    const localidad = localStorage.getItem("localidad") || "";
+
+    const body = {
+      CedulaID: selectedColaborador.CedulaID,
+      Nombre: selectedColaborador.Nombre,
+      FechaIngreso: selectedColaborador.FechaIngreso,
+      ...pagoForm,
+      Vales: valesTotal,
+      Prestamos: prestamosTotal,
+      TotalPago: totalPagar,
+      Localidad: localidad // ✅ AÑADIDO AQUÍ
+    };
+
+    // 2. Guardar pago
+    let response = await fetch("http://localhost:3001/api/pago-planilla", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // 3. Eliminar pendientes aplicados
     for (const p of pendientesAplicados) {
       if (p.tipo === "Vale") {
         await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
       } else if (p.tipo === "Financiamiento") {
-        // Registrar pago de financiamiento
-        await fetch("http://localhost:3001/api/pagos-financiamiento", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            IDFinanciamiento: p.id,
-            MontoAplicado: p.monto,
-            Fecha: new Date().toISOString().slice(0, 10),
-            Observaciones: "Aplicado desde Planilla"
-          })
-        });
+        await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
+      }
+    }
+
+    alert("Pago guardado y pendientes aplicados correctamente");
+    setShowCrearPago(false);
+    setPendientesAplicados([]); // limpiar
+    setPagoForm({ ...formularioInicial }); // limpiar
+
+    if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+
+  } catch (error) {
+    console.error("Error al guardar pago y aplicar pendientes:", error);
+  }
+
+  // 4. Registrar pagos adicionales si hay financiamientos
+  for (const p of pendientesAplicados) {
+    if (p.tipo === "Financiamiento") {
+      await fetch("http://localhost:3001/api/pagos-financiamiento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          IDFinanciamiento: p.id,
+          MontoAplicado: p.monto,
+          Fecha: new Date().toISOString().slice(0, 10),
+          Observaciones: "Aplicado desde Planilla"
+        })
+      });
 
         // Eliminar el registro (si desea borrarlo visualmente)
         await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
@@ -1472,7 +1473,7 @@ export const Dashboard = () => {
                 <label>Cuenta:</label>
                 <input type="text" className="form-control" name="Cuenta" onChange={handleChange} />
 
-                <label>Salario Base Quincenal:</label>
+                <label>Salario Base Mensual:</label>
                 <input type="number" className="form-control" name="SalarioBase" onChange={handleChange} />
 
 
@@ -1782,8 +1783,20 @@ export const Dashboard = () => {
 
                   )}
                 </div>
+
               ))}
             </div>
+            <div className="formulario-item">
+              <label>Localidad:</label>
+              <input
+                type="text"
+                className="form-control"
+                value={localStorage.getItem("localidad") || ""}
+                readOnly
+              />
+            </div>
+
+
 
             <hr />
             <p>
@@ -1805,8 +1818,6 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
-
-
 
       {showGenerarVacaciones && selectedColaborador && (
         <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}>
@@ -1970,9 +1981,17 @@ export const Dashboard = () => {
             </div>
             <h2>{viewMode ? "Ver" : "Crear"} {cards.find((c) => c.id === activeCard)?.title}</h2>
             {renderForm()}
-            <button className="btn btn-danger mt-1" onClick={() => { setActiveCard(null); setViewMode(false); }}>
-              Cerrar
-            </button>
+            <div className="d-flex justify-content-end mt-3">
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  setActiveCard(null);
+                  setViewMode(false);
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
 
           </div>
 
@@ -2002,15 +2021,6 @@ export const Dashboard = () => {
 
             {/* Formulario en 3 columnas */}
             <div className="formulario-grid-3cols">
-              {/* <div className="formulario-item">
-                <label>Fecha Ingreso:</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={selectedColaborador.FechaIngreso ? selectedColaborador.FechaIngreso.slice(0, 10) : ""}
-                  onChange={(e) => setSelectedColaborador({ ...selectedColaborador, FechaIngreso: e.target.value })}
-                />
-              </div> */}
               <div className="formulario-item">
                 <label>Nombre:</label>
                 <input
@@ -3195,33 +3205,6 @@ export const Dashboard = () => {
                 <p className="text-center text-muted">No se encontraron pagos en el rango indicado.</p>
               )}
             </div>
-            {/*
-            <div className="reporte-colillas mt-4">
-              {Array.isArray(pagosFiltrados) && pagosFiltrados.length > 0 ? (
-                pagosFiltrados.map((pago, i) => (
-                  <div key={i} className="colilla mb-4 p-3 border rounded shadow-sm">
-                    <p><strong>Nombre:</strong> {pago.Nombre}</p>
-                    <p><strong>Cédula:</strong> {pago.CedulaID}</p>
-                    <p><strong>Fecha:</strong> {pago.FechaRegistro?.slice(0, 10)}</p>
-                    <p><strong>Total a Pagar:</strong> ₡{pago.TotalPago.toLocaleString()}</p>
-                    <hr />
-                    <p><strong>Horas Trabajadas:</strong> {pago.HorasTrabajadas}</p>
-                    <p><strong>Horas Extra:</strong> {pago.HorasExtra}</p>
-                    <p><strong>Comisiones:</strong> ₡{pago.Comisiones.toLocaleString()}</p>
-                    <p><strong>Viáticos:</strong> ₡{pago.Viaticos.toLocaleString()}</p>
-                    <p><strong>CCSS:</strong> ₡{pago.CCSS.toLocaleString()}</p>
-                    <p><strong>Préstamos:</strong> ₡{pago.Prestamos.toLocaleString()}</p>
-                    <p><strong>Vales:</strong> ₡{pago.Vales.toLocaleString()}</p>
-                    <p><strong>Adelantos:</strong> ₡{pago.Adelantos.toLocaleString()}</p>
-                    <p><strong>Ahorro:</strong> ₡{pago.Ahorro.toLocaleString()}</p>
-                    <div className="mt-3 text-muted text-center">- - - - - - - - - - - - - - - - - - - - - -</div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-muted">No se encontraron pagos en el rango indicado.</p>
-              )}
-            </div>
-                 */}
             <div className="text-end mt-3">
               <button className="btn btn-secondary" onClick={() => setShowReporteColillas(false)}>Cerrar</button>
             </div>

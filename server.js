@@ -346,21 +346,21 @@ app.post("/api/pago-planilla", async (req, res) => {
   try {
     await sql.connect(dbConfig);
     await sql.query`
-      INSERT INTO PagoPlanilla (
-        CedulaID, Nombre, FechaIngreso,
-        Contrato, Cuenta, SalarioBase, TipoPago,
-        HorasTrabajadas, HorasExtra, Comisiones, Viaticos,
-        CCSS, Prestamos, Vales, Adelantos, Ahorro,
-        TotalPago, FechaRegistro, Localidad
-      )
-      VALUES (
-        ${CedulaID}, ${Nombre}, ${FechaIngreso},
-        ${Contrato}, ${Cuenta}, ${SalarioBase}, ${TipoPago},
-        ${HorasTrabajadas}, ${HorasExtra}, ${Comisiones}, ${Viaticos},
-        ${CCSS}, ${Prestamos}, ${Vales}, ${Adelantos}, ${Ahorro},
-        ${TotalPago}, GETDATE(), ${Localidad} -- ⬅️ agregado aquí
-      )
-    `;
+  INSERT INTO PagoPlanilla (
+    CedulaID, Nombre, FechaIngreso,
+    Contrato, Cuenta, SalarioBase, TipoPago,
+    HorasTrabajadas, HorasExtra, Comisiones, Viaticos,
+    CCSS, Prestamos, Vales, Adelantos, Ahorro,
+    TotalPago, FechaRegistro, Localidad
+  )
+  VALUES (
+    ${CedulaID}, ${Nombre}, ${FechaIngreso},
+    ${Contrato}, ${Cuenta}, ${SalarioBase}, ${TipoPago},
+    ${HorasTrabajadas}, ${HorasExtra}, ${Comisiones}, ${Viaticos},
+    ${CCSS}, ${Prestamos}, ${Vales}, ${Adelantos}, ${Ahorro},
+    ${TotalPago}, GETDATE(), ${Localidad}  -- ✅ COMA CORRECTA ANTES DE GETDATE()
+  )
+`;
     res.json({ message: "Pago registrado correctamente." });
   } catch (err) {
     console.error("Error al insertar pago:", err);

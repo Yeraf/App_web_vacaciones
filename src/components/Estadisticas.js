@@ -6,29 +6,31 @@ export const Estadisticas = () => {
   const [financiamientos, setFinanciamientos] = useState([]);
 
   useEffect(() => {
-    const fetchColaboradores = async () => {
-      try {
-        const res = await fetch('http://localhost:3001/api/colaboradores');
-        const data = await res.json();
-        setColaboradores(data);
-      } catch (error) {
-        console.error('Error cargando colaboradores:', error);
-      }
-    };
+  const localidad = localStorage.getItem("localidad");
 
-    const fetchFinanciamientos = async () => {
-      try {
-        const res = await fetch('http://localhost:3001/api/financiamientos');
-        const data = await res.json();
-        setFinanciamientos(data);
-      } catch (error) {
-        console.error('Error cargando financiamientos:', error);
-      }
-    };
+  const fetchColaboradores = async () => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setColaboradores(data);
+    } catch (error) {
+      console.error('Error cargando colaboradores:', error);
+    }
+  };
 
-    fetchColaboradores();
-    fetchFinanciamientos();
-  }, []);
+  const fetchFinanciamientos = async () => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/financiamientos?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setFinanciamientos(data);
+    } catch (error) {
+      console.error('Error cargando financiamientos:', error);
+    }
+  };
+
+  fetchColaboradores();
+  fetchFinanciamientos();
+}, []);
 
   const totalColaboradores = colaboradores.length;
   const totalSalarioBaseQuincenal = colaboradores.reduce((acc, curr) => acc + parseFloat(curr.SalarioBase / 2 || 0), 0);
