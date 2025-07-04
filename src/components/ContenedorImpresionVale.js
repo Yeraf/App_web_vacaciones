@@ -1,12 +1,17 @@
-// NUEVA IMPLEMENTACIÓN DESDE CERO PARA DESCARGAR BOLETA EN PDF EN TAMAÑO CARTA
-// ContenedorImpresionBoleta.js
+// ContenedorImpresionVale.js
 import html2pdf from 'html2pdf.js';
 import ReactDOMServer from 'react-dom/server';
+import React from 'react';
 
-const ContenedorImpresion = ({ boleta, empresa }) => (
+const ContenedorImpresionVale = ({ vale, empresa }) => (
   <div style={{ width: '100%', padding: '30px', fontFamily: 'Arial', fontSize: '14px' }}>
     {empresa && (
       <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        {empresa.Logo && (
+          <div style={{ marginBottom: '10px' }}>
+            <img src={empresa.Logo} alt="Logo empresa" style={{ maxWidth: '150px', maxHeight: '100px' }} />
+          </div>
+        )}
         <h3>{empresa.Empresa}</h3>
         <p>{empresa.RazonSocial}</p>
         <p><strong>N° Cédula:</strong> {empresa.NumeroCedula}</p>
@@ -16,17 +21,14 @@ const ContenedorImpresion = ({ boleta, empresa }) => (
       </div>
     )}
     <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-      <h4>Boleta de Vacaciones</h4>
+      <h4>Vale de Dinero</h4>
     </div>
     <div style={{ lineHeight: '1.6' }}>
-      <p><strong>Colaborador:</strong> {boleta.Nombre} {boleta.Apellidos || ''}</p>
-      <p><strong>Cédula:</strong> {boleta.CedulaID}</p>
-      <p><strong>Desde:</strong> {boleta.FechaSalida?.slice(0, 10)}</p>
-      <p><strong>Hasta:</strong> {boleta.FechaEntrada?.slice(0, 10)}</p>
-      <p><strong>Días solicitados:</strong> {boleta.Dias || boleta.DiasTomados || boleta.CantidadDias || 'N/D'}</p>
-      <p><strong>Motivo:</strong> {boleta.Detalle}</p>
-      <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
-      <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> <strong>{boleta.DiasDisponibles || 'N/D'}</strong></p>
+      <p><strong>Nombre:</strong> {vale.Nombre}</p>
+      <p><strong>Fecha:</strong> {vale.FechaRegistro?.slice(0, 10)}</p>
+      <p><strong>Monto:</strong> ₡{parseFloat(vale.MontoVale || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</p>
+      <p><strong>Motivo:</strong> {vale.Motivo}</p>
+      <p><strong>Empresa:</strong> {vale.Empresa}</p>
     </div>
     <div style={{ textAlign: 'center', marginTop: '30px' }}>
       <hr />
@@ -35,10 +37,10 @@ const ContenedorImpresion = ({ boleta, empresa }) => (
   </div>
 );
 
-export const generarPDFBoleta = async (boleta) => {
+export const generarPDFVale = async (vale) => {
   const localidad = localStorage.getItem("localidad");
-  if (!boleta || !localidad) {
-    alert("Faltan datos para generar la boleta.");
+  if (!vale || !localidad) {
+    alert("Faltan datos para imprimir el vale.");
     return;
   }
 
@@ -47,19 +49,18 @@ export const generarPDFBoleta = async (boleta) => {
     if (!res.ok) throw new Error("Error al obtener datos de la empresa");
     const empresa = await res.json();
 
-    // Renderizar el componente a HTML estático
+    // ✅ Renderiza el componente como HTML estático confiable
     const contenidoHTML = ReactDOMServer.renderToStaticMarkup(
-      <ContenedorImpresion boleta={boleta} empresa={empresa} />
+      <ContenedorImpresionVale vale={vale} empresa={empresa} />
     );
 
-    // Crear un contenedor temporal
     const div = document.createElement("div");
     div.innerHTML = contenidoHTML;
     document.body.appendChild(div);
 
     html2pdf().from(div).set({
       margin: 10,
-      filename: `Boleta_${boleta.NumeroBoleta || 'vacaciones'}.pdf`,
+      filename: `Vale_${vale.Nombre || 'vale'}.pdf`,
       html2canvas: { scale: 2 },
       jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
     }).save().then(() => {
@@ -67,7 +68,7 @@ export const generarPDFBoleta = async (boleta) => {
     });
 
   } catch (error) {
-    console.error("❌ Error generando PDF:", error);
-    alert("Error generando PDF. Ver consola.");
+    console.error("❌ Error generando PDF del vale:", error);
+    alert("Error generando PDF del vale. Ver consola.");
   }
 };

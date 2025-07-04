@@ -9,6 +9,9 @@ import { ModalImpresionBoleta } from './ModalImpresionBoleta';
 import { generarPDFBoleta } from './ContenedorImpresionBoleta';
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { generarPDFVale } from "./ContenedorImpresionVale";
+
+
 
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
@@ -73,6 +76,13 @@ export const Dashboard = () => {
   const [showAplicarPagoModal, setShowAplicarPagoModal] = useState(false);
   const [financiamientoSeleccionado, setFinanciamientoSeleccionado] = useState(null);
   const [showListaFinanciamientos, setShowListaFinanciamientos] = useState(false);
+  const [listaVales, setListaVales] = useState([]);
+  const [showModalVerVales, setShowModalVerVales] = useState(false);
+  const [valeSeleccionado, setValeSeleccionado] = useState(null);
+  const [showModalDetalleVale, setShowModalDetalleVale] = useState(false);
+  const [valeEditando, setValeEditando] = useState(null);
+  const [showModalEditarVale, setShowModalEditarVale] = useState(false);
+
 
   const boletasPorPagina = 5;
   const rowsPerPage = 5;
@@ -226,6 +236,19 @@ export const Dashboard = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const [vales, setVales] = useState([]);
+
+  const obtenerVales = async () => {
+    try {
+      const localidad = localStorage.getItem("localidad");
+      const res = await fetch(`http://localhost:3001/api/vales?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setVales(data); // Asegúrate de tener un estado `vales`
+    } catch (error) {
+      console.error("Error al cargar vales:", error);
+    }
   };
 
 
@@ -966,75 +989,75 @@ export const Dashboard = () => {
   };
 
   const guardarPagoPlanilla = async () => {
-  try {
-    // 1. Sumamos los montos aplicados
-    let valesTotal = pagoForm.Vales;
-    let prestamosTotal = pagoForm.Prestamos;
+    try {
+      // 1. Sumamos los montos aplicados
+      let valesTotal = pagoForm.Vales;
+      let prestamosTotal = pagoForm.Prestamos;
 
-    for (const p of pendientesAplicados) {
-      if (p.tipo === "Vale") valesTotal += p.monto;
-      if (p.tipo === "Financiamiento") prestamosTotal += p.monto;
-    }
-
-    const totalPagar = calcularPagoTotal({
-      ...pagoForm,
-      Vales: valesTotal,
-      Prestamos: prestamosTotal
-    });
-
-    const localidad = localStorage.getItem("localidad") || "";
-
-    const body = {
-      CedulaID: selectedColaborador.CedulaID,
-      Nombre: selectedColaborador.Nombre,
-      FechaIngreso: selectedColaborador.FechaIngreso,
-      ...pagoForm,
-      Vales: valesTotal,
-      Prestamos: prestamosTotal,
-      TotalPago: totalPagar,
-      Localidad: localidad // ✅ AÑADIDO AQUÍ
-    };
-
-    // 2. Guardar pago
-    let response = await fetch("http://localhost:3001/api/pago-planilla", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    // 3. Eliminar pendientes aplicados
-    for (const p of pendientesAplicados) {
-      if (p.tipo === "Vale") {
-        await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
-      } else if (p.tipo === "Financiamiento") {
-        await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
+      for (const p of pendientesAplicados) {
+        if (p.tipo === "Vale") valesTotal += p.monto;
+        if (p.tipo === "Financiamiento") prestamosTotal += p.monto;
       }
-    }
 
-    alert("Pago guardado y pendientes aplicados correctamente");
-    setShowCrearPago(false);
-    setPendientesAplicados([]); // limpiar
-    setPagoForm({ ...formularioInicial }); // limpiar
+      const totalPagar = calcularPagoTotal({
+        ...pagoForm,
+        Vales: valesTotal,
+        Prestamos: prestamosTotal
+      });
 
-    if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+      const localidad = localStorage.getItem("localidad") || "";
 
-  } catch (error) {
-    console.error("Error al guardar pago y aplicar pendientes:", error);
-  }
+      const body = {
+        CedulaID: selectedColaborador.CedulaID,
+        Nombre: selectedColaborador.Nombre,
+        FechaIngreso: selectedColaborador.FechaIngreso,
+        ...pagoForm,
+        Vales: valesTotal,
+        Prestamos: prestamosTotal,
+        TotalPago: totalPagar,
+        Localidad: localidad // ✅ AÑADIDO AQUÍ
+      };
 
-  // 4. Registrar pagos adicionales si hay financiamientos
-  for (const p of pendientesAplicados) {
-    if (p.tipo === "Financiamiento") {
-      await fetch("http://localhost:3001/api/pagos-financiamiento", {
+      // 2. Guardar pago
+      let response = await fetch("http://localhost:3001/api/pago-planilla", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          IDFinanciamiento: p.id,
-          MontoAplicado: p.monto,
-          Fecha: new Date().toISOString().slice(0, 10),
-          Observaciones: "Aplicado desde Planilla"
-        })
+        body: JSON.stringify(body),
       });
+
+      // 3. Eliminar pendientes aplicados
+      for (const p of pendientesAplicados) {
+        if (p.tipo === "Vale") {
+          await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
+        } else if (p.tipo === "Financiamiento") {
+          await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
+        }
+      }
+
+      alert("Pago guardado y pendientes aplicados correctamente");
+      setShowCrearPago(false);
+      setPendientesAplicados([]); // limpiar
+      setPagoForm({ ...formularioInicial }); // limpiar
+
+      if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+
+    } catch (error) {
+      console.error("Error al guardar pago y aplicar pendientes:", error);
+    }
+
+    // 4. Registrar pagos adicionales si hay financiamientos
+    for (const p of pendientesAplicados) {
+      if (p.tipo === "Financiamiento") {
+        await fetch("http://localhost:3001/api/pagos-financiamiento", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            IDFinanciamiento: p.id,
+            MontoAplicado: p.monto,
+            Fecha: new Date().toISOString().slice(0, 10),
+            Observaciones: "Aplicado desde Planilla"
+          })
+        });
 
         // Eliminar el registro (si desea borrarlo visualmente)
         await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
@@ -1224,6 +1247,25 @@ export const Dashboard = () => {
       </tr>
     ))
   }
+
+  const guardarCambiosVale = async () => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/vales/${valeEditando.ID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(valeEditando),
+      });
+
+      if (!res.ok) throw new Error("Error al actualizar vale");
+
+      alert("Vale actualizado correctamente");
+      setShowModalEditarVale(false);
+      obtenerVales(); // 👈 refresca la lista
+    } catch (error) {
+      console.error("Error al actualizar vale:", error);
+      alert("Hubo un error al guardar los cambios.");
+    }
+  };
 
 
   /// ⬇️ La función de impresión
@@ -1573,6 +1615,15 @@ export const Dashboard = () => {
                 onClick={() => {
                   if (card.id === "financiamientos") {
                     verListaFinanciamientos();
+                  } else if (card.id === "vales") {
+                    const localidad = localStorage.getItem("localidad");
+                    fetch(`http://localhost:3001/api/vales?localidad=${encodeURIComponent(localidad)}`)
+                      .then(res => res.json())
+                      .then(data => {
+                        setListaVales(data);          // 👈 Asegúrese de tener este estado definido
+                        setShowModalVerVales(true);   // 👈 Modal de impresión
+                      })
+                      .catch(err => console.error("Error al cargar vales:", err));
                   } else {
                     handleView(card.id);
                   }
@@ -2497,6 +2548,101 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {showModalVerVales && (
+        <div className="modal-overlay" onClick={() => setShowModalVerVales(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Lista de Vales</h4>
+            <table className="table table-bordered mt-2">
+              <thead className="table-dark">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Fecha</th>
+                  <th>Monto</th>
+                  <th>Motivo</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaVales.length > 0 ? (
+                  listaVales.map((v, idx) => (
+                    <tr key={idx}>
+                      <td>{v.Nombre}</td>
+                      <td>{v.FechaRegistro?.slice(0, 10)}</td>
+                      <td>₡{parseFloat(v.MontoVale).toLocaleString('es-CR')}</td>
+                      <td>{v.Motivo}</td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-warning me-2"
+                          onClick={() => {
+                            setValeEditando(v); // guarda el vale actual
+                            setShowModalEditarVale(true); // muestra el modal de edición
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={async () => {
+                            if (window.confirm("¿Está seguro que desea eliminar este vale?")) {
+                              try {
+                                await fetch(`http://localhost:3001/api/vales/${v.ID}`, {
+                                  method: "DELETE"
+                                });
+                                alert("Vale eliminado correctamente");
+                                obtenerVales(); // 👈 refresca la lista después de eliminar
+                              } catch (error) {
+                                console.error("Error al eliminar el vale:", error);
+                                alert("Error al eliminar el vale.");
+                              }
+                            }
+                          }}
+                        >
+                          Eliminar
+                        </button>
+
+                        {/* <button
+                          className="btn btn-sm btn-info"
+                          onClick={() => {
+                            console.log("🟦 Vale enviado desde Dashboard.js:", valeSeleccionado);  // 🧪 VERIFICACIÓN
+                            if (!valeSeleccionado || !valeSeleccionado.Nombre || !valeSeleccionado.MontoVale) {
+                              console.error("❌ Vale inválido o incompleto:", valeSeleccionado);
+                              alert("Este IMPRIMIRvale no tiene la información suficiente para imprimir.");
+                              return;
+                            }
+                            generarPDFVale(valeSeleccionado);
+                          }}
+                        >
+                          Imprimir OTRO
+                        </button> */}
+                        <button
+                          className="btn btn-info btn-sm ver-detalle-boton"
+                          onClick={() => {
+                            setValeSeleccionado(v); // ✅ Asigna este vale al estado
+                            setShowModalVerVales(false); // ✅ Cierra lista general
+                            setShowModalDetalleVale(true); // ✅ Abre modal detalle
+                          }}
+                        >
+                          Ver Detalle
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="text-center text-muted">No hay vales registrados</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div className="text-end">
+              <button className="btn btn-secondary" onClick={() => setShowModalVerVales(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {showFinanciamientoModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -3118,6 +3264,109 @@ export const Dashboard = () => {
             {/* <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary" onClick={() => setShowVerPendientes(false)}>Cerrar</button>
             </div> */}
+          </div>
+        </div>
+      )}
+
+      {showModalEditarVale && valeEditando && (
+        <div className="modal-overlay" onClick={() => setShowModalEditarVale(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Editar Vale</h3>
+
+            <div className="form-group mb-2">
+              <label>Cédula</label>
+              <input type="text" className="form-control" value={valeEditando.CedulaID} readOnly />
+            </div>
+
+            <div className="form-group mb-2">
+              <label>Nombre</label>
+              <input type="text" className="form-control" value={valeEditando.Nombre} readOnly />
+            </div>
+
+            <div className="form-group mb-2">
+              <label>Fecha de Registro</label>
+              <input
+                type="date"
+                className="form-control"
+                value={valeEditando.FechaRegistro?.slice(0, 10)}
+                onChange={(e) =>
+                  setValeEditando({ ...valeEditando, FechaRegistro: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="form-group mb-2">
+              <label>Monto del Vale</label>
+              <input
+                type="number"
+                className="form-control"
+                value={valeEditando.MontoVale}
+                onChange={(e) =>
+                  setValeEditando({ ...valeEditando, MontoVale: parseFloat(e.target.value) || 0 })
+                }
+              />
+            </div>
+
+            <div className="form-group mb-2">
+              <label>Motivo</label>
+              <textarea
+                className="form-control"
+                rows={2}
+                value={valeEditando.Motivo}
+                onChange={(e) =>
+                  setValeEditando({ ...valeEditando, Motivo: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowModalEditarVale(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarCambiosVale}>Guardar Cambios</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModalDetalleVale && valeSeleccionado && (
+        <div className="modal-overlay" onClick={() => setShowModalDetalleVale(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Detalle del Vale</h3>
+            <p><strong>Nombre:</strong> {valeSeleccionado.Nombre}</p>
+            {/* <p><strong>Apellidos:</strong> {valeSeleccionado.Apellidos || ''}</p> */}
+            <p><strong>Fecha:</strong> {valeSeleccionado.FechaRegistro?.slice(0, 10)}</p>
+            <p><strong>Monto:</strong> ₡{parseFloat(valeSeleccionado.MontoVale || 0).toLocaleString()}</p>
+            <p><strong>Motivo:</strong> {valeSeleccionado.Motivo}</p>
+            <p><strong>Empresa:</strong> {valeSeleccionado.Empresa}</p>
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowModalDetalleVale(false)}>Cerrar</button>
+              <button
+                className="btn btn-danger me-2"
+                onClick={async () => {
+                  if (window.confirm("¿Desea eliminar este vale?")) {
+                    await fetch(`http://localhost:3001/api/vales/${valeSeleccionado.ID}`, {
+                      method: "DELETE"
+                    });
+                    setShowModalDetalleVale(false);
+                    obtenerVales(); // ✅ recarga los datos
+                  }
+                }}
+              >
+                Eliminar
+              </button>
+              <button
+                className="btn btn-sm btn-info"
+                onClick={() => {
+                  if (!valeSeleccionado || !valeSeleccionado.Nombre || !valeSeleccionado.MontoVale) {
+                    alert("Este vale no tiene la información suficiente para imprimir.");
+                    return;
+                  }
+                  generarPDFVale(valeSeleccionado);
+                }}
+              >
+                Imprimir otro 2
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1096,12 +1096,14 @@ app.get("/api/vacaciones/ultimoboleta", async (req, res) => {
   }
 });
 
+
 app.get("/api/localidades/:nombre", async (req, res) => {
   const nombre = req.params.nombre;
+
   const pool = await sql.connect(dbConfig);
   const result = await pool.request()
     .input("Empresa", sql.NVarChar, nombre)
-    .query("SELECT * FROM Localidades WHERE Empresa = @Empresa");
+    .query("SELECT * FROM Localidades WHERE Empresa LIKE '%' + @Empresa + '%'");
 
   if (result.recordset.length > 0) {
     res.json(result.recordset[0]);
@@ -1109,6 +1111,51 @@ app.get("/api/localidades/:nombre", async (req, res) => {
     res.status(404).json({ message: "No se encontró la localidad" });
   }
 });
+
+app.get("/api/localidades", async (req, res) => {
+  const nombre = req.query.nombre;
+  if (!nombre) return res.status(400).json({ message: "Falta el nombre de la localidad" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Empresa", sql.NVarChar, nombre)
+      .query("SELECT TOP 1 * FROM Localidades WHERE Empresa = @Empresa");
+
+    if (result.recordset.length > 0) {
+      res.json(result.recordset[0]);
+    } else {
+      res.status(404).json({ message: "No se encontró la localidad" });
+    }
+  } catch (error) {
+    console.error("Error al consultar localidad:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+});
+
+app.get("/api/localidades", async (req, res) => {
+  const nombre = req.query.nombre;
+  if (!nombre) {
+    return res.status(400).json({ message: "Falta el nombre de la localidad" });
+  }
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("Empresa", sql.NVarChar, nombre)
+      .query("SELECT * FROM Localidades WHERE Empresa = @Empresa");
+
+    if (result.recordset.length > 0) {
+      res.json(result.recordset[0]);
+    } else {
+      res.status(404).json({ message: "Localidad no encontrada" });
+    }
+  } catch (err) {
+    console.error("Error al obtener localidad:", err);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
 
 app.get('/api/boletas-vacaciones', async (req, res) => {
   try {
@@ -1162,5 +1209,66 @@ app.get("/api/financiamientos-localidad", async (req, res) => {
   } catch (error) {
     console.error("Error al obtener financiamientos por localidad:", error);
     res.status(500).json({ error: "Error al obtener financiamientos por localidad" });
+  }
+});
+
+app.get('/api/vales', async (req, res) => {
+  const localidad = req.query.localidad || '';
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('Empresa', sql.NVarChar, localidad)
+      .query(`
+        SELECT * FROM Vales
+        WHERE Empresa = @Empresa
+        ORDER BY FechaRegistro DESC
+      `);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error al obtener lista de vales:", error);
+    res.status(500).json({ message: "Error al obtener vales por localidad" });
+  }
+});
+
+app.put('/api/vales/:id', async (req, res) => {
+  const id = req.params.id;
+  const { FechaRegistro, MontoVale, Motivo } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("FechaRegistro", sql.Date, FechaRegistro)
+      .input("MontoVale", sql.Decimal(18, 2), MontoVale)
+      .input("Motivo", sql.NVarChar(sql.MAX), Motivo)
+      .query(`
+        UPDATE Vales
+        SET FechaRegistro = @FechaRegistro,
+            MontoVale = @MontoVale,
+            Motivo = @Motivo
+        WHERE ID = @ID
+      `);
+
+    res.json({ message: "Vale actualizado correctamente" });
+  } catch (error) {
+    console.error("Error actualizando vale:", error);
+    res.status(500).json({ message: "Error actualizando vale" });
+  }
+});
+
+app.delete('/api/vales/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .query('DELETE FROM Vales WHERE ID = @ID');
+
+    res.status(200).json({ message: 'Vale eliminado correctamente' });
+  } catch (err) {
+    console.error("Error al eliminar vale:", err);
+    res.status(500).json({ message: "Error al eliminar vale" });
   }
 });
