@@ -906,7 +906,13 @@ app.get('/api/aguinaldo/:cedula', async (req, res) => {
       .input('CedulaID', sql.VarChar, cedula)
       .input('Localidad', sql.NVarChar, localidad || '')
       .query(`
-        SELECT FechaRegistro, TotalPago
+        SELECT 
+          FechaRegistro,
+          -- ✅ Salario mensual dividido entre 2 por ser quincena
+          (ISNULL(SalarioBase, 0) / 2.0) +
+          ISNULL(Comisiones, 0) +
+          ISNULL(Viaticos, 0) +
+          ISNULL(HorasExtra, 0) AS TotalBruto
         FROM PagoPlanilla
         WHERE CedulaID = @CedulaID 
           AND Localidad = @Localidad
@@ -916,10 +922,11 @@ app.get('/api/aguinaldo/:cedula', async (req, res) => {
 
     const pagos = result.recordset;
 
-    const totalAguinaldo = pagos.reduce((sum, pago) => sum + (pago.TotalPago || 0), 0) / 12;
+    const totalBruto = pagos.reduce((sum, p) => sum + (p.TotalBruto || 0), 0);
+    const aguinaldo = totalBruto / 12;
 
     res.json({
-      aguinaldo: totalAguinaldo.toFixed(2),
+      aguinaldo: aguinaldo.toFixed(2),
       pagos
     });
 
@@ -1270,5 +1277,48 @@ app.delete('/api/vales/:id', async (req, res) => {
   } catch (err) {
     console.error("Error al eliminar vale:", err);
     res.status(500).json({ message: "Error al eliminar vale" });
+  }
+});
+
+app.delete('/api/vacaciones/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // ✅ 1. Verificar si existe la boleta
+    const check = await pool.request()
+      .input('ID', sql.Int, id)
+      .query('SELECT * FROM BoletaVacaciones WHERE ID = @ID');
+
+    if (check.recordset.length === 0) {
+      return res.status(404).json({ message: 'Boleta no encontrada.' });
+    }
+
+    const boleta = check.recordset[0];
+
+    // ✅ 2. Verificar si la fecha de salida ya pasó
+    const hoy = new Date();
+    const fechaSalida = new Date(boleta.FechaSalida);
+    if (fechaSalida <= hoy) {
+      return res.status(400).json({ message: 'No se puede eliminar una boleta cuya fecha de salida ya ha pasado.' });
+    }
+
+    // ✅ 3. Validación opcional: evitar eliminar si fue usada en cálculo
+    // Suponiendo que tenga algún campo como boleta.UsadaEnPago
+    if (boleta.UsadaEnPago === 1) {
+      return res.status(400).json({ message: 'Esta boleta ya fue utilizada en el cálculo de pago y no puede eliminarse.' });
+    }
+
+    // ✅ 4. Eliminar
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .query('DELETE FROM BoletaVacaciones WHERE ID = @ID');
+
+    res.status(200).json({ message: 'Boleta eliminada correctamente.' });
+
+  } catch (error) {
+    console.error("❌ Error al eliminar boleta:", error);
+    res.status(500).json({ message: 'Error interno del servidor al eliminar.' });
   }
 });

@@ -82,9 +82,14 @@ export const Dashboard = () => {
   const [showModalDetalleVale, setShowModalDetalleVale] = useState(false);
   const [valeEditando, setValeEditando] = useState(null);
   const [showModalEditarVale, setShowModalEditarVale] = useState(false);
-
-
   const boletasPorPagina = 5;
+  const [paginaActual, setPaginaActual] = useState(1);
+  const historialOrdenado = [...vacacionesDetalle].sort((a, b) => new Date(b.FechaSalida) - new Date(a.FechaSalida));
+  const totalPaginas = Math.ceil(historialOrdenado.length / boletasPorPagina);
+  const inicio = (paginaActual - 1) * boletasPorPagina;
+  const pagina = historialOrdenado.slice(inicio, inicio + boletasPorPagina);
+
+
   const rowsPerPage = 5;
   const componentRef = useRef();
   const formularioInicial = {
@@ -682,7 +687,7 @@ export const Dashboard = () => {
 
     const datos = pagosDelAguinaldo.map(p => [
       p.FechaRegistro?.slice(0, 10),
-      `₡${parseFloat(p.TotalPago).toLocaleString()}`
+      parseFloat(p.TotalBruto || 0)  // ✅ sin símbolo ₡, como número limpio
     ]);
 
     const hojaDatos = [
@@ -694,6 +699,9 @@ export const Dashboard = () => {
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(hojaDatos);
+
+    const totalPagado = pagosDelAguinaldo.reduce((sum, p) => sum + (p.TotalBruto || 0), 0);
+    hojaDatos.push([], ['Total pagado en el período', totalPagado]);
 
     // Centrar celdas importantes
     const range = XLSX.utils.decode_range(worksheet['!ref']);
@@ -783,7 +791,8 @@ export const Dashboard = () => {
       const data = await res.json();
       setAguinaldoCalculado(data.aguinaldo);
       setPagosDelAguinaldo(data.pagos);
-      setShowAguinaldoModal(true);
+      setShowListaColaboradoresAguinaldo(false); // ✅ Oculta la lista
+      setShowAguinaldoModal(true); // ✅ Muestra el modal principal
     } catch (err) {
       console.error("Error al calcular aguinaldo:", err);
     }
@@ -1615,6 +1624,7 @@ export const Dashboard = () => {
                 onClick={() => {
                   if (card.id === "financiamientos") {
                     verListaFinanciamientos();
+
                   } else if (card.id === "vales") {
                     const localidad = localStorage.getItem("localidad");
                     fetch(`http://localhost:3001/api/vales?localidad=${encodeURIComponent(localidad)}`)
@@ -1624,7 +1634,17 @@ export const Dashboard = () => {
                         setShowModalVerVales(true);   // 👈 Modal de impresión
                       })
                       .catch(err => console.error("Error al cargar vales:", err));
-                  } else {
+                  }
+                  else if (card.id === "planilla") {
+                    setShowReporteColillas(true); // ✅ Este es el mismo modal usado por "Ver colillas"
+                    setActiveCard(card.id);
+                  }
+                  else if (card.id === "vacaciones") {
+                    obtenerTodasBoletas(); // 👈 esta función ya la tiene implementada
+                    setMostrarModalListadoBoletas(true); // 👈 activa el modal
+                    setActiveCard(card.id);
+                  }
+                  else {
                     handleView(card.id);
                   }
                 }}
@@ -2227,82 +2247,99 @@ export const Dashboard = () => {
         <div className="modal-overlay" onClick={() => setShowDetalleModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Historial de Vacaciones</h3>
-            <table className="table table-bordered table-hover table-striped">
-              <thead className="table-dark">
-                <tr>
-                  <th>Fecha Salida</th>
-                  <th>Fecha Entrada</th>
-                  <th>Días Tomados</th>
-                  <th>Detalle</th>
 
-                </tr>
-              </thead>
-              <tbody>
-                {vacacionesDetalle.length > 0 ? vacacionesDetalle.map((v, i) => (
-                  <tr key={i}>
-                    <td>{v.FechaSalida?.slice(0, 10)}</td>
-                    <td>{v.FechaEntrada?.slice(0, 10)}</td>
-                    <td>{v.DiasTomados}</td>
-                    <td style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      {v.Detalle || 'Sin detalle'}
+            {(() => {
+              const boletasPorPagina = 10;
+              const historialOrdenado = [...vacacionesDetalle].sort((a, b) => new Date(b.FechaSalida) - new Date(a.FechaSalida));
+              const totalPaginas = Math.ceil(historialOrdenado.length / boletasPorPagina);
+              const inicio = (paginaActual - 1) * boletasPorPagina;
+              const pagina = historialOrdenado.slice(inicio, inicio + boletasPorPagina);
+
+              return (
+                <>
+                  <table className="table table-bordered table-hover table-striped">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>Fecha Salida</th>
+                        <th>Fecha Entrada</th>
+                        <th>Días Tomados</th>
+                        <th>Detalle</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagina.length > 0 ? pagina.map((v, i) => (
+                        <tr key={i}>
+                          <td>{v.FechaSalida?.slice(0, 10)}</td>
+                          <td>{v.FechaEntrada?.slice(0, 10)}</td>
+                          <td>{v.DiasTomados}</td>
+                          <td>{v.Detalle || 'Sin detalle'}</td>
+                          <td style={{ display: 'flex', gap: '5px' }}>
+                            <button
+                              className="btn btn-sm btn-warning"
+                              onClick={() => {
+                                setVacacionEditando({ ...v, ID: v.ID });
+                                setShowEditarVacacionModal(true);
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={async () => {
+                                const confirmar = window.confirm("¿Desea eliminar esta boleta de vacaciones?");
+                                if (!confirmar) return;
+
+                                try {
+                                  const res = await fetch(`http://localhost:3001/api/vacaciones/${v.ID}`, {
+                                    method: 'DELETE'
+                                  });
+
+                                  if (res.ok) {
+                                    alert("Boleta eliminada correctamente.");
+                                    verDetalleVacaciones(colaboradorSeleccionado?.CedulaID);
+                                  } else {
+                                    const err = await res.json();
+                                    alert(err.message || "Error al eliminar la boleta.");
+                                  }
+                                } catch (err) {
+                                  console.error("Error al eliminar:", err);
+                                  alert("Error de conexión al eliminar.");
+                                }
+                              }}
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan="5" className="text-center text-muted">Sin registros</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                  <div className="d-flex justify-content-center mt-2">
+                    {[...Array(totalPaginas)].map((_, i) => (
                       <button
-                        className="btn btn-sm btn-warning ms-2"
-                        onClick={() => {
-                          setVacacionEditando({ ...v, ID: v.ID }); // Asegúrate que tenga el ID
-                          setShowEditarVacacionModal(true);
-                        }}
+                        key={i}
+                        className={`btn btn-sm me-1 ${paginaActual === i + 1 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                        onClick={() => setPaginaActual(i + 1)}
                       >
-                        Editar
+                        {i + 1}
                       </button>
-                    </td>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
 
-                  </tr>
-                )) : (
-                  <tr><td colSpan="4" className="text-center text-muted">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
-            <div className="text-end">
+            <div className="text-end mt-3">
               <button className="btn btn-secondary" onClick={() => setShowDetalleModal(false)}>Cerrar</button>
             </div>
           </div>
         </div>
       )}
 
-      {showListaColaboradoresAguinaldo && (
-        <div className="modal-overlay" onClick={() => setShowListaColaboradoresAguinaldo(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Lista de Colaboradores - Aguinaldo</h3>
-            <table className="table table-bordered table-striped">
-              <thead className="table-dark">
-                <tr>
-                  <th>Nombre</th>
-                  <th>Cédula</th>
-                  <th>Fecha Ingreso</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {colaboradores.map((colab, index) => (
-                  <tr key={index}>
-                    <td>{colab.Nombre}</td>
-                    <td>{colab.CedulaID}</td>
-                    <td>{colab.FechaIngreso?.slice(0, 10)}</td>
-                    <td>
-                      <button className="btn btn-sm btn-success" onClick={() => calcularAguinaldo(colab)}>
-                        Calcular
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="text-end">
-              <button className="btn btn-secondary" onClick={() => setShowListaColaboradoresAguinaldo(false)}>Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showEditarVacacionModal && vacacionEditando && (
         <div className="modal-overlay" onClick={() => setShowEditarVacacionModal(false)}>
@@ -2367,13 +2404,17 @@ export const Dashboard = () => {
             <div id="reporte-aguinaldo" style={{ padding: "20px", textAlign: "center" }}>
               <h3>Aguinaldo de {selectedColaborador?.Nombre}</h3>
               <p><strong>Total Aguinaldo: ₡{parseFloat(aguinaldoCalculado).toLocaleString()}</strong></p>
+              <p className="text-muted">
+                Cálculo del aguinaldo con base en pagos del <strong>01/12/{new Date().getFullYear() - 1}</strong> al <strong>30/11/{new Date().getFullYear()}</strong>
+              </p>
               <table className="table">
                 <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
                 <tbody>
                   {pagosDelAguinaldo.map((pago, i) => (
                     <tr key={i}>
                       <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-                      <td>₡{pago.TotalPago.toLocaleString()}</td>
+                      <td>₡{parseFloat(pago.TotalBruto || 0).toLocaleString()}</td>
+                      {/* <td>₡{pago.TotalPago.toLocaleString()}</td> */}
                     </tr>
                   ))}
                 </tbody>
@@ -2388,6 +2429,58 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+
+      {showListaColaboradoresAguinaldo && (
+        <div className="modal-overlay" onClick={() => setShowListaColaboradoresAguinaldo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Seleccione colaborador para calcular aguinaldo</h4>
+            <p className="text-muted">
+              Cálculo del aguinaldo con base en los pagos desde <strong>01/12/{new Date().getFullYear() - 1}</strong> hasta <strong>30/11/{new Date().getFullYear()}</strong>
+            </p>
+            <ul className="list-group">
+              {colaboradores.map((col, i) => (
+                <li
+                  key={i}
+                  className="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <span>{col.Nombre} {col.Apellidos}</span>
+                  <button
+                    className="btn btn-sm btn-success"
+                    onClick={() => calcularAguinaldo(col)}
+                  >
+                    Calcular
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="text-end mt-3">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowListaColaboradoresAguinaldo(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+            {aguinaldoCalculado && pagosDelAguinaldo?.length > 0 && (
+              <div className="mt-4 text-center">
+                <hr />
+                {/* <p><strong>Total pagado en el periodo:</strong> ₡{pagosDelAguinaldo.reduce((sum, p) => sum + (p.TotalBruto || 0), 0).toLocaleString()}</p> */}
+                <p style={{ marginTop: '20px' }}>
+                  <strong>Total pagado en el período:</strong> ₡
+                  {pagosDelAguinaldo.reduce((sum, p) => sum + (p.TotalBruto || 0), 0).toLocaleString()}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+
+
+
+
+
       {/* ********************************************* */}
       {showFinanciamientosModal && (
         <div className="modal-overlay" onClick={() => setShowFinanciamientosModal(false)}>
@@ -3364,7 +3457,7 @@ export const Dashboard = () => {
                   generarPDFVale(valeSeleccionado);
                 }}
               >
-                Imprimir otro 2
+                Imprimir Vale
               </button>
             </div>
           </div>
