@@ -2407,18 +2407,37 @@ export const Dashboard = () => {
               <p className="text-muted">
                 Cálculo del aguinaldo con base en pagos del <strong>01/12/{new Date().getFullYear() - 1}</strong> al <strong>30/11/{new Date().getFullYear()}</strong>
               </p>
-              <table className="table">
-                <thead><tr><th>Fecha</th><th>Monto</th></tr></thead>
-                <tbody>
-                  {pagosDelAguinaldo.map((pago, i) => (
-                    <tr key={i}>
-                      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-                      <td>₡{parseFloat(pago.TotalBruto || 0).toLocaleString()}</td>
-                      {/* <td>₡{pago.TotalPago.toLocaleString()}</td> */}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+              <div className="row">
+                {[0, 1, 2].map(colIndex => (
+                  <div className="col-md-4" key={colIndex}>
+                    <table className="table table-bordered">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagosDelAguinaldo
+                          .slice(colIndex * 6, (colIndex + 1) * 6)
+                          .map((pago, i) => (
+                            <tr key={i}>
+                              <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                              <td>₡{parseFloat(pago.TotalBruto || 0).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-3 text-end">
+                <strong>Total de Pagos: ₡{
+                  pagosDelAguinaldo.reduce((sum, pago) => sum + (parseFloat(pago.TotalBruto) || 0), 0).toLocaleString()
+                }</strong>
+              </p>
             </div>
 
             <div className="d-flex justify-content-between mt-3">
@@ -2429,7 +2448,6 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
-
 
       {showListaColaboradoresAguinaldo && (
         <div className="modal-overlay" onClick={() => setShowListaColaboradoresAguinaldo(false)}>
