@@ -88,7 +88,13 @@ export const Dashboard = () => {
   const totalPaginas = Math.ceil(historialOrdenado.length / boletasPorPagina);
   const inicio = (paginaActual - 1) * boletasPorPagina;
   const pagina = historialOrdenado.slice(inicio, inicio + boletasPorPagina);
-
+  const pagosPorPagina = 6;
+  const [showEliminarPagoModal, setShowEliminarPagoModal] = useState(false);
+  const indexInicio = (paginaActual - 1) * pagosPorPagina;
+  const indexFin = indexInicio + pagosPorPagina;
+  const [pagoAEliminar, setPagoAEliminar] = useState(null);
+  const [showConfirmarEliminar, setShowConfirmarEliminar] = useState(false);
+  const [mostrarConfirmacionEliminar, setMostrarConfirmacionEliminar] = useState(false);
 
   const rowsPerPage = 5;
   const componentRef = useRef();
@@ -108,6 +114,26 @@ export const Dashboard = () => {
     Ahorro: 0,
     MontoPorHoraExtra: 0
   };
+
+  const [paginaActualPagos, setPaginaActualPagos] = useState(1);
+
+
+  const totalPaginasPagos = Math.ceil(pagosColaborador.length / pagosPorPagina);
+
+  const pagosPaginados = pagosColaborador.slice(
+    (paginaActualPagos - 1) * pagosPorPagina,
+    paginaActualPagos * pagosPorPagina
+  );
+
+  const [showEditarPagoModal, setShowEditarPagoModal] = useState(false);
+  const [pagoAEditar, setPagoAEditar] = useState(null);
+
+  const abrirModalEditarPago = (pago) => {
+    setPagoAEditar(pago);
+    setShowEditarPagoModal(true);
+  };
+
+
 
   useEffect(() => {
     if (activeCard === "vacaciones") {
@@ -541,6 +567,120 @@ export const Dashboard = () => {
     }
   };
 
+  const guardarEdicionPago = async () => {
+    try {
+      const response = await fetch("http://localhost:3001/api/pagos/editar", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...pagoAEditar,
+          FechaEdicion: new Date().toISOString().slice(0, 10),
+          Localidad: localidad,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert("Pago editado correctamente.");
+        setShowEditarPagoModal(false);
+
+        // Actualizar pagosColaborador en pantalla
+        setPagosColaborador((prev) =>
+          prev.map((p) => (p.ID === pagoAEditar.ID ? { ...p, ...pagoAEditar } : p))
+        );
+
+        // También puede recargar de backend si prefiere consistencia total:
+        // await cargarPagosColaborador(selectedColaborador?.CedulaID);
+      } else {
+        console.error("Error al editar:", data);
+        alert("Error al editar el pago.");
+      }
+    } catch (error) {
+      console.error("Error en guardarEdicionPago:", error);
+      alert("Error inesperado al guardar la edición.");
+    }
+  };
+
+  const eliminarPagoSimple = async (pagoID) => {
+    try {
+      if (!pagoID) {
+        console.warn("ID de pago no definido");
+        return alert("ID de pago no válido.");
+      }
+
+      const confirmacion = window.confirm("¿Está seguro que desea eliminar este pago? Esta acción no se puede deshacer.");
+      if (!confirmacion) return;
+
+      const hoy = new Date().toISOString().slice(0, 10);
+      const pago = pagosColaborador.find(p => p.ID === pagoID);
+
+      if (!pago) return alert("Pago no encontrado.");
+
+      const fechaPago = new Date(pago.FechaRegistro).toISOString().slice(0, 10);
+      if (fechaPago !== hoy) {
+        return alert("Solo se pueden eliminar pagos del día actual.");
+      }
+
+      // 🔁 1. Revertir VALES pagados
+      if (pago.Vales && pago.Vales > 0) {
+        const resVales = await fetch(`http://localhost:3001/api/vales-pagados/por-pago/${pagoID}`);
+        const valesPagados = await resVales.json();
+
+        for (const vale of valesPagados) {
+          const resVale = await fetch(`http://localhost:3001/api/vales/${vale.ValeID}`);
+          const valeOriginal = await resVale.json();
+          const nuevoMonto = (valeOriginal.MontoVale || 0) + vale.MontoAplicado;
+
+          if (valeOriginal?.ID) {
+            await fetch(`http://localhost:3001/api/vales/${vale.ValeID}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ MontoVale: nuevoMonto })
+            });
+          }
+
+          await fetch(`http://localhost:3001/api/vales-pagados/${vale.ID}`, { method: "DELETE" });
+        }
+      }
+
+      // 🔁 2. Revertir FINANCIAMIENTOS abonados
+      if (pago.Prestamos && pago.Prestamos > 0) {
+        const resPagosFin = await fetch(`http://localhost:3001/api/pagos-financiamiento/por-pago/${pagoID}`);
+        const pagosFinanciamiento = await resPagosFin.json();
+
+        for (const abono of pagosFinanciamiento) {
+          const resFin = await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}`);
+          const finOriginal = await resFin.json();
+          const nuevoSaldo = (finOriginal.MontoPendiente || 0) + abono.MontoAplicado;
+
+          await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ MontoPendiente: nuevoSaldo })
+          });
+
+          await fetch(`http://localhost:3001/api/pagos-financiamiento/${abono.ID}`, { method: "DELETE" });
+        }
+      }
+
+      // 🗑️ 3. Eliminar el pago de planilla
+      const res = await fetch(`http://localhost:3001/api/pago-planilla/${pagoID}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Error al eliminar el pago");
+
+      alert("Pago eliminado correctamente");
+
+      // 🔄 4. Refrescar vista
+      setShowPagosModal(false);
+      setPagoAEliminar(null);
+      if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+
+    } catch (error) {
+      console.error("❌ Error al eliminar el pago:", error);
+      alert("Error al eliminar el pago");
+    }
+  };
+
   const generarReportePagos = async () => {
     const localidad = localStorage.getItem("localidad");
 
@@ -580,6 +720,8 @@ export const Dashboard = () => {
 
   const guardarPagoFinanciamiento = async () => {
     try {
+      const localidad = localStorage.getItem("localidad"); // ✅ obtenemos la localidad
+
       const response = await fetch("http://localhost:3001/api/pagos-financiamiento", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -587,9 +729,11 @@ export const Dashboard = () => {
           FinanciamientoID: financiamientoSeleccionado.ID,
           FechaPago: pagoForm.FechaPago,
           MontoAplicado: pagoForm.MontoAplicado,
-          Observaciones: pagoForm.Observaciones
+          Observaciones: pagoForm.Observaciones,
+          Localidad: localidad // ✅ solo agregamos esta línea
         })
       });
+
       const data = await response.json();
       alert(data.message || "Pago aplicado correctamente");
       setShowAplicarPagoModal(false);
@@ -999,14 +1143,9 @@ export const Dashboard = () => {
 
   const guardarPagoPlanilla = async () => {
     try {
-      // 1. Sumamos los montos aplicados
-      let valesTotal = pagoForm.Vales;
-      let prestamosTotal = pagoForm.Prestamos;
-
-      for (const p of pendientesAplicados) {
-        if (p.tipo === "Vale") valesTotal += p.monto;
-        if (p.tipo === "Financiamiento") prestamosTotal += p.monto;
-      }
+      // 1. Ya no se suman nuevamente los pendientes si ya fueron visualizados
+      const valesTotal = pagoForm.Vales;
+      const prestamosTotal = pagoForm.Prestamos;
 
       const totalPagar = calcularPagoTotal({
         ...pagoForm,
@@ -1024,57 +1163,80 @@ export const Dashboard = () => {
         Vales: valesTotal,
         Prestamos: prestamosTotal,
         TotalPago: totalPagar,
-        Localidad: localidad // ✅ AÑADIDO AQUÍ
+        Localidad: localidad
       };
 
-      // 2. Guardar pago
+      // 2. Guardar el pago de planilla
       let response = await fetch("http://localhost:3001/api/pago-planilla", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
-      // 3. Eliminar pendientes aplicados
+      if (!response.ok) throw new Error("Error al guardar el pago");
+
+      // 3. Aplicar pendientes SOLO AHORA (cuando se confirmó el pago)
       for (const p of pendientesAplicados) {
-        if (p.tipo === "Vale") {
-          await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
-        } else if (p.tipo === "Financiamiento") {
-          await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
+        if (p.tipo === "Financiamiento") {
+          await fetch("http://localhost:3001/api/financiamientos/aplicar-abono", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              FinanciamientoID: p.id,
+              MontoAplicado: p.monto,
+              Observaciones: "Aplicado desde Planilla",
+              Localidad: localidad
+            })
+          });
+        } else if (p.tipo === "Vale") {
+          // 1. Registrar en tabla ValesPagados
+          await fetch("http://localhost:3001/api/vales/pagado", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ValeID: p.id,
+              CedulaID: selectedColaborador.CedulaID,
+              Nombre: selectedColaborador.Nombre,
+              FechaPago: new Date().toISOString().slice(0, 10),
+              MontoAplicado: p.monto,
+              Observaciones: "Aplicado desde Planilla",
+              Empresa: localidad
+            })
+          });
+
+          // 2. Obtener el monto actual y actualizar solo si queda saldo
+          const resVale = await fetch(`http://localhost:3001/api/vales/${p.id}`);
+          const valeOriginal = await resVale.json();
+
+          const nuevoMonto = (valeOriginal.MontoVale || 0) - p.monto;
+
+          if (nuevoMonto <= 0) {
+            // Si ya se pagó todo, eliminar
+            await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
+          } else {
+            // Si queda saldo, actualizar el monto
+            await fetch(`http://localhost:3001/api/vales/${p.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ MontoVale: nuevoMonto })
+            });
+          }
         }
       }
 
+      // 4. Finalizar
       alert("Pago guardado y pendientes aplicados correctamente");
       setShowCrearPago(false);
-      setPendientesAplicados([]); // limpiar
-      setPagoForm({ ...formularioInicial }); // limpiar
+      setPendientesAplicados([]);
+      setPagoForm({ ...formularioInicial });
 
       if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
 
     } catch (error) {
       console.error("Error al guardar pago y aplicar pendientes:", error);
-    }
-
-    // 4. Registrar pagos adicionales si hay financiamientos
-    for (const p of pendientesAplicados) {
-      if (p.tipo === "Financiamiento") {
-        await fetch("http://localhost:3001/api/pagos-financiamiento", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            IDFinanciamiento: p.id,
-            MontoAplicado: p.monto,
-            Fecha: new Date().toISOString().slice(0, 10),
-            Observaciones: "Aplicado desde Planilla"
-          })
-        });
-
-        // Eliminar el registro (si desea borrarlo visualmente)
-        await fetch(`http://localhost:3001/api/financiamientos/${p.id}`, { method: "DELETE" });
-      }
+      alert("Error al guardar el pago");
     }
   };
-
-
 
   const [diasSolicitados, setDiasSolicitados] = useState(0);
   // Estado para días libres
@@ -1175,6 +1337,29 @@ export const Dashboard = () => {
     }
   };
 
+  const confirmarEliminarPago = async (pago) => {
+    if (!pago || !pago.ID) {
+      console.error("ID de pago no definido:", pago);
+      alert("Error: este pago no contiene un ID válido.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/eliminar-pago-planilla/${pago.ID}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) throw new Error("Error al eliminar el pago");
+
+      alert("Pago eliminado correctamente");
+      setShowEliminarPagoModal(false);
+      setPagoAEliminar(null);
+      if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+    } catch (error) {
+      console.error("Error al eliminar pago:", error);
+      alert("Error al eliminar el pago");
+    }
+  };
   // ... Dentro de Dashboard.js o donde tenga su función de guardar boleta
 
   const handleSubmitVacaciones = async (e) => {
@@ -2543,6 +2728,53 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showEditarPagoModal && pagoAEditar && (
+        <div className="modal-overlay" onClick={() => setShowEditarPagoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Editar Pago</h4>
+
+            <div className="row">
+              <div className="col-md-4">
+                <label>Horas:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={pagoAEditar.HorasTrabajadas}
+                  onChange={(e) => setPagoAEditar({ ...pagoAEditar, HorasTrabajadas: e.target.value })}
+                />
+              </div>
+
+              <div className="col-md-4">
+                <label>Préstamos:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={pagoAEditar.Prestamos}
+                  onChange={(e) => setPagoAEditar({ ...pagoAEditar, Prestamos: e.target.value })}
+                />
+              </div>
+
+              <div className="col-md-4">
+                <label>Vales:</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={pagoAEditar.Vales}
+                  onChange={(e) => setPagoAEditar({ ...pagoAEditar, Vales: e.target.value })}
+                />
+              </div>
+
+              {/* Repite para Comisiones, Viáticos, Adelantos, Ahorro, etc. */}
+            </div>
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowEditarPagoModal(false)}>Cancelar</button>
+              <button className="btn btn-success" onClick={() => guardarEdicionPago(pagoAEditar)}>Guardar Cambios</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showValesModal && (
         <div className="modal-overlay" onClick={() => setShowValesModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -2659,6 +2891,41 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+
+      {/* Modal de Confirmación para eliminar pago */}
+      {mostrarConfirmacionEliminar && (
+  <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+    <div className="modal-dialog modal-dialog-centered">
+      <div className="modal-content">
+        <div className="modal-header bg-danger text-white">
+          <h5 className="modal-title">Confirmar eliminación</h5>
+          <button type="button" className="btn-close" onClick={() => setMostrarConfirmacionEliminar(false)}></button>
+        </div>
+        <div className="modal-body">
+          <p>
+            ¿Está seguro que desea eliminar el pago de <strong>{pagoAEliminar?.Nombre}</strong> por <strong>₡{pagoAEliminar?.TotalPago?.toLocaleString()}</strong>?
+          </p>
+          <p className="text-danger">Esta acción no se puede deshacer.</p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => setMostrarConfirmacionEliminar(false)}>
+            Cancelar
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              eliminarPagoSimple(pagoAEliminar.ID);
+              setMostrarConfirmacionEliminar(false);
+            }}
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {showModalVerVales && (
         <div className="modal-overlay" onClick={() => setShowModalVerVales(false)}>
@@ -3087,7 +3354,7 @@ export const Dashboard = () => {
 
             <div className="text-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowAplicarPagoModal(false)}>Cancelar</button>
-              <button className="btn btn-success" onClick={guardarPagoFinanciamiento}>Aplicar Pago</button>
+              <button className="btn btn-success" onClick={guardarPagoFinanciamiento}>Aplicar Pago otro 2</button>
             </div>
           </div>
         </div>
@@ -3161,7 +3428,7 @@ export const Dashboard = () => {
                             setShowAplicarPagoModal(true);    // 👈 ABRE el modal de aplicar pago
                           }}
                         >
-                          Aplicar
+                          Aplicar otro
                         </button>
                         <button
                           className="btn btn-sm btn-success me-1 button-lista-financimientos"
@@ -3207,7 +3474,7 @@ export const Dashboard = () => {
               </thead>
               <tbody>
                 {pagosColaborador.length > 0 ? (
-                  pagosColaborador.map((pago, index) => (
+                  pagosPaginados.map((pago, index) => (
                     <tr key={index}>
                       <td>{pago.FechaRegistro?.slice(0, 10)}</td>
                       <td>₡{pago.TotalPago.toLocaleString()}</td>
@@ -3221,20 +3488,20 @@ export const Dashboard = () => {
                       <td>{pago.Adelantos}</td>
                       <td>{pago.Ahorro}</td>
                       <td>
-                        <button
+                        {/* <button
                           className="btn btn-sm btn-warning me-1"
-                          onClick={() => editarPago(pago)}
+                          onClick={() => abrirModalEditarPago(pago)}
                         >
                           Editar
-                        </button>
+                        </button> */}
                         <button
                           className="btn btn-sm btn-danger"
-                          onClick={() => eliminarPago(pago.ID)}
-                          data-bs-toggle="tooltip"
-                          data-bs-placement="bottom"
-                          title="Eliminar el Pago"
+                          onClick={() => {
+                            setPagoAEliminar(pago); // Guarda temporalmente el pago
+                            setMostrarConfirmacionEliminar(true); // Muestra el modal
+                          }}
                         >
-                          -
+                          Eliminar -
                         </button>
                       </td>
                     </tr>
@@ -3243,9 +3510,73 @@ export const Dashboard = () => {
                   <tr><td colSpan="11" className="text-center text-muted">Sin pagos registrados</td></tr>
                 )}
               </tbody>
+
             </table>
             <div className="text-end">
               <button className="btn btn-secondary" onClick={() => setShowPagosModal(false)}>Cerrar</button>
+            </div>
+
+            <div className="d-flex justify-content-between align-items-center mt-3">
+              <div>
+                Página {paginaActualPagos} de {totalPaginasPagos}
+              </div>
+              <div>
+                <button
+                  className="btn btn-outline-primary btn-sm me-2"
+                  disabled={paginaActualPagos === 1}
+                  onClick={() => setPaginaActualPagos(paginaActualPagos - 1)}
+                >
+                  Anterior
+                </button>
+                <button
+                  className="btn btn-outline-primary btn-sm"
+                  disabled={paginaActualPagos === totalPaginasPagos}
+                  onClick={() => setPaginaActualPagos(paginaActualPagos + 1)}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+
+
+
+
+          </div>
+
+        </div>
+      )}
+
+      {showEliminarPagoModal && (
+        <div className="modal-overlay" onClick={() => setShowEliminarPagoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-danger">¿Eliminar este pago?</h4>
+            <p>Esta acción devolverá saldos a vales y financiamientos si aplica.</p>
+            <div className="text-end">
+              <button className="btn btn-secondary me-2" onClick={() => setShowEliminarPagoModal(false)}>
+                Cancelar
+              </button>
+              <button className="btn btn-danger" onClick={async () => {
+                try {
+                  const response = await fetch(`http://localhost:3001/api/eliminar-pago-planilla/${pagoAEliminar.ID}`, {
+                    method: "DELETE"
+                  });
+
+                  if (!response.ok) throw new Error("Error al eliminar el pago");
+
+                  alert("Pago eliminado correctamente.");
+                  setShowEliminarPagoModal(false);
+                  setPagoAEliminar(null);
+
+                  // Recargar pagos
+                  if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
+
+                } catch (error) {
+                  console.error("Error al eliminar pago:", error);
+                  alert("Ocurrió un error al eliminar el pago");
+                }
+              }}>
+                Sí, eliminar
+              </button>
             </div>
           </div>
         </div>
@@ -3345,8 +3676,14 @@ export const Dashboard = () => {
                         <button
                           className="btn btn-sm btn-success"
                           onClick={() => {
-                            const nuevosPendientes = pendientesAplicados.filter(p => !(p.tipo === "Financiamiento" && p.id === fin.ID));
-                            const actualizados = [...nuevosPendientes, { tipo: "Financiamiento", id: fin.ID, monto: fin.MontoPendiente }];
+                            const nuevosPendientes = pendientesAplicados.filter(
+                              p => !(p.tipo === "Financiamiento" && p.id === fin.ID)
+                            );
+                            const actualizados = [...nuevosPendientes, {
+                              tipo: "Financiamiento",
+                              id: fin.ID,
+                              monto: fin.MontoPendiente
+                            }];
                             setPendientesAplicados(actualizados);
                             actualizarMontosDesdePendientes(actualizados);
                           }}
@@ -3482,6 +3819,49 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showEditarPagoModal && (
+        <div className="modal-overlay" onClick={() => setShowEditarPagoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Editar Pago</h4>
+
+            <div className="mb-2">
+              <label>Total Pago</label>
+              <input
+                type="number"
+                className="form-control"
+                value={pagoAEditar?.TotalPago || ""}
+                onChange={(e) =>
+                  setPagoAEditar({ ...pagoAEditar, TotalPago: parseFloat(e.target.value) || 0 })
+                }
+              />
+            </div>
+
+            <div className="mb-2">
+              <label>Préstamos</label>
+              <input
+                type="number"
+                className="form-control"
+                value={pagoAEditar?.Prestamos || ""}
+                onChange={(e) =>
+                  setPagoAEditar({ ...pagoAEditar, Prestamos: parseFloat(e.target.value) || 0 })
+                }
+              />
+            </div>
+
+            {/* Agregue aquí otros campos que desee editar */}
+
+            <div className="text-end">
+              <button className="btn btn-success me-2" onClick={guardarEdicionPago}>
+                Guardar Cambios
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowEditarPagoModal(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showReporteColillas && (
         <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
@@ -3567,6 +3947,22 @@ export const Dashboard = () => {
             </div>
             <div className="text-end mt-3">
               <button className="btn btn-secondary" onClick={() => setShowReporteColillas(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmarEliminar && (
+        <div className="modal-overlay" onClick={() => setShowConfirmarEliminar(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4 className="mb-3">¿Está seguro de eliminar este pago?</h4>
+            <p>Esta acción no se puede deshacer.</p>
+            <div className="text-end">
+              <button className="btn btn-secondary me-2" onClick={() => setShowConfirmarEliminar(false)}>Cancelar</button>
+              <button className="btn btn-danger" onClick={async () => {
+                await confirmarEliminarPago(pagoAEliminar);
+                setShowConfirmarEliminar(false);
+              }}>Eliminar</button>
             </div>
           </div>
         </div>

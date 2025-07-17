@@ -378,8 +378,8 @@ app.get("/api/pago-planilla/:cedula", async (req, res) => {
       .input("CedulaID", sql.NVarChar, cedula);
 
     let query = `
-      SELECT Nombre, CedulaID, TotalPago, FechaRegistro, HorasTrabajadas, HorasExtra,
-             Comisiones, Viaticos, CCSS, Prestamos, Vales, Adelantos, Ahorro
+      SELECT ID, Nombre, CedulaID, TotalPago, FechaRegistro, HorasTrabajadas, HorasExtra,
+       Comisiones, Viaticos, CCSS, Prestamos, Vales, Adelantos, Ahorro
       FROM PagoPlanilla
       WHERE CedulaID = @CedulaID
     `;
@@ -774,11 +774,8 @@ app.put("/api/vacaciones/editar", async (req, res) => {
 });
 
 
-
-// ...resto de tu Server.js arriba intacto...
-
 app.post("/api/pagos-financiamiento", async (req, res) => {
-  const { FinanciamientoID, FechaPago, MontoAplicado, Observaciones } = req.body;
+  const { FinanciamientoID, FechaPago, MontoAplicado, Observaciones, Localidad } = req.body;
 
   try {
     const pool = await sql.connect(dbConfig);
@@ -789,9 +786,10 @@ app.post("/api/pagos-financiamiento", async (req, res) => {
       .input("FechaPago", sql.Date, FechaPago)
       .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
       .input("Observaciones", sql.NVarChar(sql.MAX), Observaciones)
+      .input("Localidad", sql.NVarChar, Localidad)
       .query(`
-        INSERT INTO PagosFinanciamiento (FinanciamientoID, FechaPago, MontoAplicado, Observaciones)
-        VALUES (@FinanciamientoID, @FechaPago, @MontoAplicado, @Observaciones)
+        INSERT INTO PagosFinanciamiento (FinanciamientoID, FechaPago, MontoAplicado, Observaciones, Localidad)
+        VALUES (@FinanciamientoID, @FechaPago, @MontoAplicado, @Observaciones, @Localidad)
       `);
 
     // 2. Actualizar el monto pendiente
@@ -815,7 +813,7 @@ app.post("/api/pagos-financiamiento", async (req, res) => {
     if (result.recordset.length > 0) {
       const f = result.recordset[0];
 
-      // 4. Registrar en tabla EliminadosFin
+      // 4. Registrar en tabla EliminadosFin, ahora incluyendo Localidad ✅
       await pool.request()
         .input("FinanciamientoID", sql.Int, f.ID)
         .input("CedulaID", sql.NVarChar(50), f.CedulaID)
@@ -823,15 +821,18 @@ app.post("/api/pagos-financiamiento", async (req, res) => {
         .input("MontoOriginal", sql.Decimal(18, 2), f.Monto)
         .input("FechaEliminacion", sql.Date, new Date())
         .input("Motivo", sql.NVarChar(sql.MAX), "Eliminado automáticamente tras pago completo desde Planilla")
+        .input("Localidad", sql.NVarChar(100), Localidad) // ✅ CAMPO AÑADIDO
         .query(`
-          INSERT INTO EliminadosFin (FinanciamientoID, CedulaID, Nombre, MontoOriginal, FechaEliminacion, Motivo)
-          VALUES (@FinanciamientoID, @CedulaID, @Nombre, @MontoOriginal, @FechaEliminacion, @Motivo)
+          INSERT INTO EliminadosFin (FinanciamientoID, CedulaID, Nombre, MontoOriginal, FechaEliminacion, Motivo, Localidad)
+          VALUES (@FinanciamientoID, @CedulaID, @Nombre, @MontoOriginal, @FechaEliminacion, @Motivo, @Localidad)
         `);
 
       // 5. Eliminar de la tabla Financiamientos
-      await pool.request()
+      const deleteResult = await pool.request()
         .input("ID", sql.Int, f.ID)
         .query(`DELETE FROM Financiamientos WHERE ID = @ID`);
+
+      console.log("Filas eliminadas en Financiamientos:", deleteResult.rowsAffected);
     }
 
     res.json({ message: "Pago aplicado correctamente" });
@@ -1320,5 +1321,322 @@ app.delete('/api/vacaciones/:id', async (req, res) => {
   } catch (error) {
     console.error("❌ Error al eliminar boleta:", error);
     res.status(500).json({ message: 'Error interno del servidor al eliminar.' });
+  }
+});
+
+
+
+app.post("/api/financiamientos/aplicar-abono", async (req, res) => {
+  const { FinanciamientoID, MontoAplicado, Observaciones, Localidad } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1. Insertar abono en PagosFinanciamiento
+    await pool.request()
+      .input("FinanciamientoID", sql.Int, FinanciamientoID)
+      .input("FechaPago", sql.Date, new Date())
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .input("Observaciones", sql.NVarChar(sql.MAX), Observaciones)
+      .input("Localidad", sql.NVarChar, Localidad)
+      .query(`
+        INSERT INTO PagosFinanciamiento (FinanciamientoID, FechaPago, MontoAplicado, Observaciones, Localidad)
+        VALUES (@FinanciamientoID, @FechaPago, @MontoAplicado, @Observaciones, @Localidad)
+      `);
+
+    // 2. Actualizar MontoPendiente
+    await pool.request()
+      .input("ID", sql.Int, FinanciamientoID)
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .query(`
+        UPDATE Financiamientos
+        SET MontoPendiente = ISNULL(MontoPendiente, 0) - @MontoAplicado
+        WHERE ID = @ID
+      `);
+
+    // 3. Verificar si ya está en cero
+    const result = await pool.request()
+      .input("ID", sql.Int, FinanciamientoID)
+      .query(`
+        SELECT * FROM Financiamientos
+        WHERE ID = @ID AND ISNULL(MontoPendiente, 0) <= 0
+      `);
+
+    if (result.recordset.length > 0) {
+      const f = result.recordset[0];
+
+      // 4. Registrar en tabla EliminadosFin, ahora incluyendo Localidad ✅
+      await pool.request()
+        .input("FinanciamientoID", sql.Int, f.ID)
+        .input("CedulaID", sql.NVarChar(50), f.CedulaID)
+        .input("Nombre", sql.NVarChar(100), f.Nombre)
+        .input("MontoOriginal", sql.Decimal(18, 2), f.Monto)
+        .input("FechaEliminacion", sql.Date, new Date())
+        .input("Motivo", sql.NVarChar(sql.MAX), "Eliminado automáticamente tras pago completo desde Planilla")
+        .input("Localidad", sql.NVarChar(100), Localidad)
+        .query(`
+      INSERT INTO EliminadosFin (FinanciamientoID, CedulaID, Nombre, MontoOriginal, FechaEliminacion, Motivo, Localidad)
+      VALUES (@FinanciamientoID, @CedulaID, @Nombre, @MontoOriginal, @FechaEliminacion, @Motivo, @Localidad)
+    `);
+
+      // ✅ 5.1 Eliminar pagos relacionados para evitar error de clave foránea
+      await pool.request()
+        .input("FinanciamientoID", sql.Int, f.ID)
+        .query(`DELETE FROM PagosFinanciamiento WHERE FinanciamientoID = @FinanciamientoID`);
+
+      // ✅ 5.2 Ahora sí eliminar el financiamiento
+      await pool.request()
+        .input("ID", sql.Int, f.ID)
+        .query(`DELETE FROM Financiamientos WHERE ID = @ID`);
+    }
+
+    res.json({ message: "Abono aplicado correctamente" });
+
+  } catch (err) {
+    console.error("❌ Error general al aplicar abono:", err);
+    res.status(500).json({ error: "Error al aplicar el abono de financiamiento" });
+  }
+});
+
+
+app.post("/api/vales/pagado", async (req, res) => {
+  const {
+    ValeID, CedulaID, Nombre, FechaPago,
+    MontoAplicado, Observaciones, Empresa
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ValeID", sql.Int, ValeID)
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre)
+      .input("FechaPago", sql.Date, FechaPago)
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .input("Observaciones", sql.NVarChar(sql.MAX), Observaciones)
+      .input("Empresa", sql.NVarChar, Empresa)
+      .query(`
+        INSERT INTO ValesPagados (
+          ValeID, CedulaID, Nombre, FechaPago,
+          MontoAplicado, Observaciones, Empresa
+        )
+        VALUES (
+          @ValeID, @CedulaID, @Nombre, @FechaPago,
+          @MontoAplicado, @Observaciones, @Empresa
+        )
+      `);
+
+    res.json({ message: "Vale registrado como pagado correctamente" });
+  } catch (err) {
+    console.error("Error al registrar vale pagado:", err);
+    res.status(500).json({ error: "Error al registrar vale pagado" });
+  }
+});
+
+app.put("/api/vales/:id", async (req, res) => {
+  try {
+    const { MontoVale } = req.body;
+    const id = req.params.id;
+
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("MontoVale", sql.Decimal(18, 2), MontoVale)
+      .query("UPDATE Vales SET MontoVale = @MontoVale WHERE ID = @ID");
+
+    res.json({ message: "Vale actualizado correctamente" });
+  } catch (error) {
+    console.error("Error actualizando vale:", error);
+    res.status(500).json({ error: "Error actualizando vale" });
+  }
+});
+
+app.get("/api/vales/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("ID", sql.Int, id)
+      .query("SELECT * FROM Vales WHERE ID = @ID");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ error: "Vale no encontrado" });
+    }
+
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error("Error al obtener el vale:", error);
+    res.status(500).json({ error: "Error al obtener el vale" });
+  }
+});
+
+
+const guardarEdicionPago = async (pagoEditado) => {
+  try {
+    const response = await fetch("http://localhost:3001/api/pagos/editar", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pagoEditado),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert("Pago actualizado correctamente.");
+      setShowEditarPagoModal(false);
+      obtenerPagosColaborador(); // refrescar lista
+    } else {
+      alert("Error al actualizar: " + data.error);
+    }
+  } catch (error) {
+    console.error("Error al editar pago:", error);
+    alert("Hubo un error al intentar editar el pago.");
+  }
+};
+
+
+app.delete("/api/pagos/eliminar/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1. Verificar que el pago sea de hoy
+    const result = await pool
+      .request()
+      .input("ID", sql.Int, id)
+      .query("SELECT * FROM PagoPlanilla WHERE ID = @ID");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ error: "Pago no encontrado" });
+    }
+
+    const pago = result.recordset[0];
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    const fechaPago = pago.FechaRegistro.toISOString().slice(0, 10);
+
+    if (fechaHoy !== fechaPago) {
+      return res.status(403).json({ error: "Solo se pueden eliminar pagos del día de hoy" });
+    }
+
+    // 2. Revertir financiamientos
+    await pool
+      .request()
+      .input("PagoID", sql.Int, id)
+      .query(`
+        UPDATE f
+        SET f.MontoPendiente = f.MontoPendiente + pf.MontoAplicado
+        FROM Financiamientos f
+        INNER JOIN PagosFinanciamiento pf ON pf.FinanciamientoID = f.ID
+        WHERE pf.PagoID = @PagoID
+      `);
+
+    // 3. Eliminar registros de PagosFinanciamiento
+    await pool
+      .request()
+      .input("PagoID", sql.Int, id)
+      .query("DELETE FROM PagosFinanciamiento WHERE PagoID = @PagoID");
+
+    // 4. Revertir Vales (suma de nuevo el monto aplicado)
+    await pool
+      .request()
+      .input("PagoID", sql.Int, id)
+      .query(`
+        UPDATE v
+        SET v.MontoVale = v.MontoVale + vp.MontoAplicado
+        FROM Vales v
+        INNER JOIN ValesPagados vp ON vp.ValeID = v.ID
+        WHERE vp.PagoID = @PagoID
+      `);
+
+    // 5. Eliminar registros de ValesPagados
+    await pool
+      .request()
+      .input("PagoID", sql.Int, id)
+      .query("DELETE FROM ValesPagados WHERE PagoID = @PagoID");
+
+    // 6. Eliminar el registro de PagoPlanilla
+    await pool
+      .request()
+      .input("ID", sql.Int, id)
+      .query("DELETE FROM PagoPlanilla WHERE ID = @ID");
+
+    res.json({ message: "Pago eliminado y revertido correctamente" });
+
+  } catch (err) {
+    console.error("❌ Error al eliminar pago:", err);
+    res.status(500).json({ error: "Error al eliminar el pago" });
+  }
+});
+
+app.delete("/api/eliminar-pago-planilla/:id", async (req, res) => {
+  const idPago = parseInt(req.params.id);
+  if (isNaN(idPago)) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1. Obtener el pago
+    const { recordset } = await pool.request()
+      .input("ID", sql.Int, idPago)
+      .query("SELECT * FROM PagoPlanilla WHERE ID = @ID");
+
+    if (recordset.length === 0) return res.status(404).json({ error: "Pago no encontrado" });
+
+    const pago = recordset[0];
+
+    // 2. Verificar si es del día
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (pago.FechaRegistro.slice(0, 10) !== hoy)
+      return res.status(400).json({ error: "Solo se pueden eliminar pagos del día" });
+
+    // 3. Revertir financiamientos
+    if (pago.Prestamos > 0) {
+      const pagosFin = await pool.request()
+        .input("CedulaID", sql.NVarChar, pago.CedulaID)
+        .query(`SELECT * FROM PagosFinanciamiento WHERE CedulaID = @CedulaID AND Observaciones = 'Aplicado desde Planilla' AND MontoAplicado > 0`);
+
+      for (const abono of pagosFin.recordset) {
+        // Revertir monto pendiente
+        await pool.request()
+          .input("ID", sql.Int, abono.FinanciamientoID)
+          .input("Monto", sql.Decimal(18, 2), abono.MontoAplicado)
+          .query(`UPDATE Financiamientos SET MontoPendiente = MontoPendiente + @Monto WHERE ID = @ID`);
+
+        // Borrar abono
+        await pool.request()
+          .input("ID", sql.Int, abono.ID)
+          .query(`DELETE FROM PagosFinanciamiento WHERE ID = @ID`);
+      }
+    }
+
+    // 4. Revertir vales
+    if (pago.Vales > 0) {
+      const pagosVales = await pool.request()
+        .input("CedulaID", sql.NVarChar, pago.CedulaID)
+        .query(`SELECT * FROM ValesPagados WHERE CedulaID = @CedulaID AND Observaciones = 'Aplicado desde Planilla' AND MontoAplicado > 0`);
+
+      for (const valePagado of pagosVales.recordset) {
+        await pool.request()
+          .input("ID", sql.Int, valePagado.ValeID)
+          .input("Monto", sql.Decimal(18, 2), valePagado.MontoAplicado)
+          .query(`UPDATE Vales SET MontoVale = MontoVale + @Monto WHERE ID = @ID`);
+
+        await pool.request()
+          .input("ID", sql.Int, valePagado.ID)
+          .query(`DELETE FROM ValesPagados WHERE ID = @ID`);
+      }
+    }
+
+    // 5. Eliminar el pago principal
+    await pool.request()
+      .input("ID", sql.Int, idPago)
+      .query(`DELETE FROM PagoPlanilla WHERE ID = @ID`);
+
+    res.json({ message: "Pago eliminado y saldos revertidos" });
+
+  } catch (err) {
+    console.error("❌ Error al eliminar pago:", err);
+    res.status(500).json({ error: "Error al eliminar el pago" });
   }
 });
