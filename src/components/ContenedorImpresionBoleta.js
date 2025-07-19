@@ -7,10 +7,10 @@ const ContenedorImpresion = ({ boleta, empresa }) => (
     {empresa && (
       <div style={{ textAlign: 'center', marginBottom: '20px' }}>
         {empresa.Logo && (
-      <div style={{ marginBottom: '10px' }}>
-        <img src={empresa.Logo} alt="Logo empresa" style={{ maxWidth: '150px', maxHeight: '100px' }} />
-      </div>
-    )}
+          <div style={{ marginBottom: '10px' }}>
+            <img src={empresa.Logo} alt="Logo empresa" style={{ maxWidth: '150px', maxHeight: '100px' }} />
+          </div>
+        )}
         <h3>{empresa.Empresa}</h3>
         <p>{empresa.RazonSocial}</p>
         <p><strong>N° Cédula:</strong> {empresa.NumeroCedula}</p>
@@ -32,8 +32,25 @@ const ContenedorImpresion = ({ boleta, empresa }) => (
       <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
       <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> <strong>{boleta.DiasDisponibles || 'N/D'}</strong></p>
     </div>
+    <table style={{ width: '100%', marginTop: '40px', fontSize: "11px" }}>
+      <tbody>
+        <tr>
+          <td style={{ textAlign: "center" }}>
+            ______________________<br />
+            Firma Encargado
+          </td>
+          <td style={{ textAlign: "center" }}>
+            ______________________<br />
+            Firma Colaborador
+          </td>
+        </tr>
+      </tbody>
+    </table>
     <div style={{ textAlign: 'center', marginTop: '30px' }}>
       <hr />
+      <p style={{ marginTop: "20px", textAlign: "center" }}>
+        Fecha de impresión: {new Date().toLocaleDateString()}
+      </p>
       <em>Gracias por su gestión</em>
     </div>
   </div>

@@ -222,10 +222,40 @@ export const Dashboard = () => {
           <p><strong>Motivo:</strong> {boleta.Detalle}</p>
           <p><strong>Boleta:</strong> {boleta.NumeroBoleta}</p>
           {/* Días disponibles */}
-          {boleta.DiasDisponibles !== undefined && (
+          {/* {boleta.DiasDisponibles !== undefined && (
             <p><strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong> {boleta.DiasDisponibles}</p>
-          )}
+          )} */}
+          <p>
+            <strong style={{ fontWeight: 'bold' }}>Días disponibles:</strong>{" "}
+            {
+              (() => {
+                const diasAntes = Number(boleta.DiasAntes ?? boleta.DiasDisponibles ?? 0);
+                const diasSolicitados = Number(boleta.CantidadDias ?? boleta.Dias ?? boleta.DiasTomados ?? 0);
+                const actualizados = !isNaN(diasAntes) && !isNaN(diasSolicitados)
+                  ? Math.max(0, diasAntes - diasSolicitados)
+                  : "N/D";
+                return actualizados;
+              })()
+            }
+          </p>
+          <table style={{ width: '100%', marginTop: '40px', fontSize: "11px" }}>
+            <tbody>
+              <tr>
+                <td style={{ textAlign: "center" }}>
+                  ______________________<br />
+                  Firma Encargado
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  ______________________<br />
+                  Firma Colaborador
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+        <p style={{ marginTop: "20px", textAlign: "center" }}>
+          Fecha de impresión: {new Date().toLocaleDateString()}
+        </p>
       </div>
     );
   });
@@ -1968,9 +1998,10 @@ export const Dashboard = () => {
                           generarPDFBoleta(boletaConDias);
                         }}
                       >
-                        Descargar PDF
+                        Descargar PDF BOLETA
                       </button>
                     </td>
+
                   </tr>
                 ))}
               </tbody>
@@ -2895,37 +2926,37 @@ export const Dashboard = () => {
 
       {/* Modal de Confirmación para eliminar pago */}
       {mostrarConfirmacionEliminar && (
-  <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-    <div className="modal-dialog modal-dialog-centered">
-      <div className="modal-content">
-        <div className="modal-header bg-danger text-white">
-          <h5 className="modal-title">Confirmar eliminación</h5>
-          <button type="button" className="btn-close" onClick={() => setMostrarConfirmacionEliminar(false)}></button>
+        <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">Confirmar eliminación</h5>
+                <button type="button" className="btn-close" onClick={() => setMostrarConfirmacionEliminar(false)}></button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  ¿Está seguro que desea eliminar el pago de <strong>{pagoAEliminar?.Nombre}</strong> por <strong>₡{pagoAEliminar?.TotalPago?.toLocaleString()}</strong>?
+                </p>
+                <p className="text-danger">Esta acción no se puede deshacer.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setMostrarConfirmacionEliminar(false)}>
+                  Cancelar
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => {
+                    eliminarPagoSimple(pagoAEliminar.ID);
+                    setMostrarConfirmacionEliminar(false);
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="modal-body">
-          <p>
-            ¿Está seguro que desea eliminar el pago de <strong>{pagoAEliminar?.Nombre}</strong> por <strong>₡{pagoAEliminar?.TotalPago?.toLocaleString()}</strong>?
-          </p>
-          <p className="text-danger">Esta acción no se puede deshacer.</p>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => setMostrarConfirmacionEliminar(false)}>
-            Cancelar
-          </button>
-          <button
-            className="btn btn-danger"
-            onClick={() => {
-              eliminarPagoSimple(pagoAEliminar.ID);
-              setMostrarConfirmacionEliminar(false);
-            }}
-          >
-            Eliminar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {showModalVerVales && (
         <div className="modal-overlay" onClick={() => setShowModalVerVales(false)}>
