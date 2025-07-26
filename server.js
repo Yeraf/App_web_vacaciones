@@ -1640,3 +1640,25 @@ app.delete("/api/eliminar-pago-planilla/:id", async (req, res) => {
     res.status(500).json({ error: "Error al eliminar el pago" });
   }
 });
+
+app.get("/api/colaborador-por-cedula", async (req, res) => {
+  const { cedula, localidad } = req.query;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool
+      .request()
+      .input("CedulaID", sql.VarChar, cedula)
+      .input("Empresa", sql.VarChar, localidad)
+      .query("SELECT TOP 1 * FROM Colaboradores WHERE CedulaID = @CedulaID AND Empresa = @Empresa");
+
+    if (result.recordset.length > 0) {
+      res.json(result.recordset[0]);
+    } else {
+      res.status(404).json({ error: "Colaborador no encontrado" });
+    }
+  } catch (err) {
+    console.error("❌ Error en /api/colaborador-por-cedula:", err);
+    res.status(500).json({ error: "Error al consultar colaborador" });
+  }
+});

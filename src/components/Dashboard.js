@@ -10,7 +10,7 @@ import { generarPDFBoleta } from './ContenedorImpresionBoleta';
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { generarPDFVale } from "./ContenedorImpresionVale";
-
+import ContratoColaborador from './ContratoColaborador';
 
 
 export const Dashboard = () => {
@@ -95,6 +95,7 @@ export const Dashboard = () => {
   const [pagoAEliminar, setPagoAEliminar] = useState(null);
   const [showConfirmarEliminar, setShowConfirmarEliminar] = useState(false);
   const [mostrarConfirmacionEliminar, setMostrarConfirmacionEliminar] = useState(false);
+  const [showContratoModal, setShowContratoModal] = useState(false);
 
   const rowsPerPage = 5;
   const componentRef = useRef();
@@ -115,6 +116,10 @@ export const Dashboard = () => {
     MontoPorHoraExtra: 0
   };
 
+  const cerrarVacacionesModal = () => {
+    setShowVacacionesModal(false);
+  };
+
   const [paginaActualPagos, setPaginaActualPagos] = useState(1);
 
 
@@ -131,6 +136,13 @@ export const Dashboard = () => {
   const abrirModalEditarPago = (pago) => {
     setPagoAEditar(pago);
     setShowEditarPagoModal(true);
+  };
+
+  const reiniciarModalVacaciones = () => {
+    setShowVacacionesModal(false);
+    setTimeout(() => {
+      setShowVacacionesModal(true);
+    }, 300); // suficiente para desmontar y volver a montar correctamente
   };
 
 
@@ -549,6 +561,7 @@ export const Dashboard = () => {
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
     { id: "vales", title: "VALES", img: "/images/mano-con-dolar.png" },
     { id: "aguinaldo", title: "AGUINALDO", img: "/images/disponible.png" },
+    { id: "contratos", title: "CONTRATO", img: "/images/disponible.png" },
     // { id: "disponible3", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
@@ -1446,10 +1459,11 @@ export const Dashboard = () => {
       setVacacionesForm({ ...formularioInicial });
       obtenerVacaciones();
 
-      // Llama inmediatamente a imprimir
       imprimirBoletaVacaciones(nuevaBoleta);
+      setShowGenerarVacaciones(false); // Cierra el modal de crear
 
-      setTimeout(() => setShowGenerarVacaciones(false), 1200);
+      // 👇 Llama a la función que ya usa cuando se presiona "CREAR"
+      await handleVacacionesModal(); // 🔁 Esto refresca los colaboradores con días actualizados
 
     } catch (error) {
       console.error("Error al guardar boleta:", error);
@@ -1775,6 +1789,7 @@ export const Dashboard = () => {
 
       case "vacaciones":
       case "planilla":
+      case "contrato":
       case "financiamientos":
         return null; // No mostrar formulario aquí si no es en modo CREAR
       default:
@@ -1825,6 +1840,9 @@ export const Dashboard = () => {
                   } else if (card.id === "aguinaldo") {
                     abrirModalAguinaldo();
                   }
+                  else if (card.id === "contratos") {
+                    setShowContratoModal(true);
+                  }
                   else {
                     setActiveCard(card.id);
                     setViewMode(false);
@@ -1871,15 +1889,16 @@ export const Dashboard = () => {
         </div>
       ))}
 
+      {/* <div className="modal-overlay" onClick={() => setShowVacacionesModal(false)}></div> */}
       {showVacacionesModal && (
-        <div className="modal-overlay" onClick={() => setShowVacacionesModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "absolute", top: 10, right: 10 }}>
               <button
                 className="btn btn-sm btn-outline-info"
-                onClick={() => {
-                  obtenerTodasBoletas();
-                  setMostrarModalListadoBoletas(true);
+                onClick={async () => {
+                  await obtenerTodasBoletas(); // ✅ Espera a que termine de cargar
+                  setMostrarModalListadoBoletas(true); // ✅ Luego muestra el modal
                 }}
               >
                 Ver Boletas
@@ -1948,7 +1967,7 @@ export const Dashboard = () => {
                 Siguiente &gt;
               </button>
             </div>
-            <button className="btn btn-secondary mt-3" onClick={() => setShowVacacionesModal(false)}>Cerrar</button>
+            <button className="btn btn-secondary mt-3" onClick={() => setShowVacacionesModal(false)}>Cerrar vacaciones</button>
           </div>
         </div>
       )}
@@ -2028,8 +2047,9 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* <div className="modal-overlay" onClick={() => setShowCrearPago(false)}></div> */}
       {showCrearPago && selectedColaborador && (
-        <div className="modal-overlay" onClick={() => setShowCrearPago(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Crear Pago para {selectedColaborador.Nombre}</h3>
 
@@ -2106,8 +2126,9 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}></div> */}
       {showGenerarVacaciones && selectedColaborador && (
-        <div className="modal-overlay" onClick={() => setShowGenerarVacaciones(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Boleta de Vacaciones</h3>
 
@@ -2228,7 +2249,7 @@ export const Dashboard = () => {
 
             <div className="d-flex justify-content-end mt-3">
               <button className="btn btn-secondary me-2" onClick={() => setShowGenerarVacaciones(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSubmitVacaciones}>Guardar Boleta</button>
+              <button className="btn btn-primary" onClick={handleSubmitVacaciones}>Guardar Boleta Vaca</button>
             </div>
           </div>
         </div>
@@ -2513,7 +2534,13 @@ export const Dashboard = () => {
 
                                   if (res.ok) {
                                     alert("Boleta eliminada correctamente.");
-                                    verDetalleVacaciones(colaboradorSeleccionado?.CedulaID);
+
+                                    // ✅ Cierra el modal actual de historial
+                                    setShowDetalleModal(false);
+
+                                    // ✅ Refresca días disponibles en la tabla principal
+                                    await handleVacacionesModal();
+
                                   } else {
                                     const err = await res.json();
                                     alert(err.message || "Error al eliminar la boleta.");
@@ -2700,10 +2727,10 @@ export const Dashboard = () => {
               <div className="mt-4 text-center">
                 <hr />
                 {/* <p><strong>Total pagado en el periodo:</strong> ₡{pagosDelAguinaldo.reduce((sum, p) => sum + (p.TotalBruto || 0), 0).toLocaleString()}</p> */}
-                <p style={{ marginTop: '20px' }}>
+                {/* <p style={{ marginTop: '20px' }}>
                   <strong>Total pagado en el período:</strong> ₡
                   {pagosDelAguinaldo.reduce((sum, p) => sum + (p.TotalBruto || 0), 0).toLocaleString()}
-                </p>
+                </p> */}
               </div>
             )}
           </div>
@@ -2806,8 +2833,10 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* <div className="modal-overlay" onClick={() => setShowValesModal(false)}></div> */}
+
       {showValesModal && (
-        <div className="modal-overlay" onClick={() => setShowValesModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Crear Vale</h3>
 
@@ -2958,8 +2987,9 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* <div className="modal-overlay" onClick={() => setShowModalVerVales(false)}></div> */}
       {showModalVerVales && (
-        <div className="modal-overlay" onClick={() => setShowModalVerVales(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h4>Lista de Vales</h4>
             <table className="table table-bordered mt-2">
@@ -3051,9 +3081,10 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* // <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}></div> */}
 
       {showFinanciamientoModal && (
-        <div className="modal-overlay" onClick={() => setShowFinanciamientoModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>{modoEditarFinanciamiento ? "Editar Financiamiento" : "Crear Financiamiento"}</h3>
 
@@ -3258,8 +3289,10 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {/* <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}></div> */}
+
       {showReporteTabla && (
-        <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Reporte de Pagos por Rango de Fechas</h3>
 
@@ -3353,6 +3386,17 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showContratoModal && (
+        <div className="modal-overlay" onClick={() => setShowContratoModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <ContratoColaborador />
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary" onClick={() => setShowContratoModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAplicarPagoModal && financiamientoSeleccionado && (
         <div className="modal-overlay" onClick={() => setShowAplicarPagoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -3391,8 +3435,10 @@ export const Dashboard = () => {
         </div>
       )}
 
+
+      {/* <div className="modal-overlay" onClick={() => setShowVerFinanciamientos(false)}></div> */}
       {showVerFinanciamientos && (
-        <div className="modal-overlay" onClick={() => setShowVerFinanciamientos(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Lista de Financiamientos</h3>
             <table className="table table-bordered table-hover table-striped mt-2">
