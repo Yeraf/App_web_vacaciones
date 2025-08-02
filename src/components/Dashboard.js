@@ -11,6 +11,7 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { generarPDFVale } from "./ContenedorImpresionVale";
 import ContratoColaborador from './ContratoColaborador';
+import GestionContratos from "./GestionCotratos";
 
 
 export const Dashboard = () => {
@@ -3389,7 +3390,7 @@ export const Dashboard = () => {
       {showContratoModal && (
         <div className="modal-overlay" onClick={() => setShowContratoModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <ContratoColaborador />
+            <GestionContratos />
             <div className="text-end mt-3">
               <button className="btn btn-secondary" onClick={() => setShowContratoModal(false)}>Cerrar</button>
             </div>

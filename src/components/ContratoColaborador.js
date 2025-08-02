@@ -3,12 +3,8 @@ import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const ContratoColaborador = () => {
-  const [form, setForm] = useState({
-    CedulaID: "",
-    Nombre: "",
-    FechaContrato: "",
-    Contenido: `CONTRATO INDIVIDUAL DE TRABAJO
+const ContratoColaborador = ({ modo = "crear", contrato = null, onClose, resetAfterSave = false }) => {
+  const contenidoBase = `CONTRATO INDIVIDUAL DE TRABAJO
 Entre el patrono: ____________________________________________, con cédula jurídica/número de identificación: _______________________, con domicilio en: ____________________________________________________, en adelante llamado "EL PATRONO";
 
 Y la persona trabajadora:
@@ -62,10 +58,16 @@ Firma del patrono: _______________________________
 Nombre completo: _______________________________
 
 Firma de la persona trabajadora: _______________________________
-Nombre completo: _______________________________`
-  });
+Nombre completo: _______________________________`;
 
+  const [form, setForm] = useState({
+    CedulaID: "",
+    Nombre: "",
+    FechaContrato: "",
+    Contenido: contenidoBase
+  });
   const [empresa, setEmpresa] = useState(null);
+  const [existeContrato, setExisteContrato] = useState(false);
 
   useEffect(() => {
     const localidad = localStorage.getItem("localidad");
@@ -75,24 +77,51 @@ Nombre completo: _______________________________`
         .then(data => setEmpresa(data))
         .catch(err => console.error("Error cargando encabezado:", err));
     }
-  }, []);
+
+    if (modo === "editar" && contrato) {
+      setForm({
+        ID: contrato.ID, // 👈 necesario para actualizar
+        CedulaID: contrato.CedulaID,
+        Nombre: contrato.Nombre,
+        FechaContrato: contrato.FechaContrato?.split("T")[0],
+        Contenido: contrato.Contenido
+      });
+      setExisteContrato(true);
+    }
+  }, [modo, contrato]);
 
   const guardarContrato = async () => {
-    const body = {
-      ...form,
-      Empresa: localStorage.getItem("localidad"),
-      Usuario: localStorage.getItem("usuario"),
-      FechaRegistro: new Date().toISOString()
-    };
+    const method = existeContrato ? "PUT" : "POST";
+    const url = existeContrato
+      ? `http://localhost:3001/api/contratos/${form.ID}` // ✅ ahora sí correcto
+      : "http://localhost:3001/api/contratos";
 
-    const res = await fetch("http://localhost:3001/api/contratos", {
-      method: "POST",
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        ...form,
+        Empresa: localStorage.getItem("localidad"),
+        Usuario: localStorage.getItem("usuario"),
+        FechaRegistro: new Date().toISOString()
+      })
     });
 
-    if (res.ok) alert("Contrato guardado correctamente.");
-    else alert("Error al guardar contrato.");
+    if (res.ok) {
+      alert("Contrato guardado correctamente.");
+      if (resetAfterSave) {
+        setForm({
+          CedulaID: "",
+          Nombre: "",
+          FechaContrato: "",
+          Contenido: contenidoBase
+        });
+        setExisteContrato(false);
+      }
+      if (onClose) onClose(); // 🔴 cerrar modal
+    } else {
+      alert("Error al guardar contrato.");
+    }
   };
 
   const descargarPDF = () => {
@@ -113,7 +142,7 @@ Nombre completo: _______________________________`
 
     doc.setFontSize(12);
     doc.setFont("times", "bold");
-    doc.text("Contrato Laboral", 105, y, { align: "center" });
+    doc.text("Contrato", 105, y, { align: "center" });
     y += 10;
 
     doc.setFont("times", "normal");
@@ -136,12 +165,13 @@ Nombre completo: _______________________________`
   return (
     <div className="container mt-4">
       <EncabezadoEmpresa />
-      <h4>Contrato Laboral</h4>
+      <h4>Contrato</h4>
 
       <div className="row mb-2">
         <div className="col-md-4">
           <label>Cédula</label>
-          <input className="form-control" value={form.CedulaID} onChange={e => setForm({ ...form, CedulaID: e.target.value })} />
+          <input className="form-control" value={form.CedulaID}
+            onChange={e => setForm({ ...form, CedulaID: e.target.value })} />
         </div>
         <div className="col-md-4">
           <label>Nombre</label>
@@ -155,22 +185,17 @@ Nombre completo: _______________________________`
 
       <div className="mb-3">
         <label>Contenido del Contrato</label>
-        <textarea
-          rows={25}
-          className="form-control"
-          value={form.Contenido}
-          onChange={e => setForm({ ...form, Contenido: e.target.value })}
-        />
+        <textarea rows={25} className="form-control" value={form.Contenido} onChange={e => setForm({ ...form, Contenido: e.target.value })} />
       </div>
 
       <div className="text-end">
-        <button className="btn btn-secondary me-2" onClick={descargarPDF}>Descargar PDF</button>
-        <button className="btn btn-primary" onClick={guardarContrato}>Guardar</button>
+        <button className="btn btn-secondary me-2" onClick={descargarPDF}>Descargar PDF Contrato</button>
+        <button className="btn btn-primary me-2" onClick={guardarContrato}>
+          {existeContrato ? "Actualizar" : "Guardar"}
+        </button>
       </div>
     </div>
   );
 };
 
 export default ContratoColaborador;
-
-

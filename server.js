@@ -706,6 +706,19 @@ app.put('/api/financiamientos/:id', async (req, res) => {
   }
 });
 
+app.get('/api/localidades/ver-todas', async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .query('SELECT * FROM Localidades');
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error al obtener todas las localidades:", error);
+    res.status(500).json({ message: "Error al obtener localidades", error });
+  }
+});
+
 app.put('/api/financiamientos/:id', async (req, res) => {
   const id = req.params.id;
   const {
@@ -1660,5 +1673,256 @@ app.get("/api/colaborador-por-cedula", async (req, res) => {
   } catch (err) {
     console.error("❌ Error en /api/colaborador-por-cedula:", err);
     res.status(500).json({ error: "Error al consultar colaborador" });
+  }
+});
+
+app.post("/api/contratos", async (req, res) => {
+  const {
+    CedulaID, Nombre, FechaContrato, Contenido, Empresa, Usuario
+  } = req.body;
+
+  console.log("📥 Datos recibidos:", req.body); // <-- Agrega esto
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre)
+      .input("FechaContrato", sql.Date, FechaContrato)
+      .input("Contenido", sql.NVarChar(sql.MAX), Contenido)
+      .input("Empresa", sql.NVarChar, Empresa)
+      .input("Usuario", sql.NVarChar, Usuario)
+      .input("FechaRegistro", sql.Date, new Date())
+      .query(`
+        INSERT INTO Contratos (
+          CedulaID, Nombre, FechaContrato,
+          Contenido, Empresa, Usuario, FechaRegistro
+        ) VALUES (
+          @CedulaID, @Nombre, @FechaContrato,
+          @Contenido, @Empresa, @Usuario, @FechaRegistro
+        )
+      `);
+
+    res.status(201).json({ message: "Contrato guardado correctamente" });
+  } catch (error) {
+    console.error("❌ Error al guardar contrato:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/contratos", async (req, res) => {
+  const { empresa, cedula } = req.query;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    let query = `
+      SELECT ID, CedulaID, Nombre, FechaContrato, Empresa, Usuario, FechaRegistro
+      FROM Contratos
+      WHERE 1 = 1
+    `;
+
+    const request = pool.request();
+
+    if (empresa) {
+      query += " AND Empresa = @Empresa";
+      request.input("Empresa", sql.NVarChar, empresa);
+    }
+
+    if (cedula) {
+      query += " AND CedulaID = @CedulaID";
+      request.input("CedulaID", sql.NVarChar, cedula);
+    }
+
+    query += " ORDER BY FechaContrato DESC";
+
+    const result = await request.query(query);
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("❌ Error al obtener contratos:", error);
+    res.status(500).json({ error: "Error al obtener contratos" });
+  }
+});
+
+app.get("/api/contratos/:id", async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("ID", sql.Int, id)
+      .query("SELECT * FROM Contratos WHERE ID = @ID");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Contrato no encontrado" });
+    }
+
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error("❌ Error al obtener contrato:", error);
+    res.status(500).json({ error: "Error al obtener contrato" });
+  }
+});
+
+app.put("/api/contratos/:id", async (req, res) => {
+  const id = req.params.id;
+  const {
+    CedulaID, Nombre, FechaContrato,
+    Contenido, Empresa, Usuario
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("CedulaID", sql.NVarChar, CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre)
+      .input("FechaContrato", sql.Date, FechaContrato)
+      .input("Contenido", sql.NVarChar(sql.MAX), Contenido)
+      .input("Empresa", sql.NVarChar, Empresa)
+      .input("Usuario", sql.NVarChar, Usuario)
+      .query(`
+        UPDATE Contratos SET
+          CedulaID = @CedulaID,
+          Nombre = @Nombre,
+          FechaContrato = @FechaContrato,
+          Contenido = @Contenido,
+          Empresa = @Empresa,
+          Usuario = @Usuario
+        WHERE ID = @ID
+      `);
+
+    res.json({ message: "Contrato actualizado correctamente" });
+  } catch (error) {
+    console.error("❌ Error al actualizar contrato:", error);
+    res.status(500).json({ error: "Error al actualizar contrato" });
+  }
+});
+
+app.delete("/api/contratos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request().input("ID", sql.Int, id).query("DELETE FROM Contratos WHERE ID = @ID");
+    res.json({ message: "Contrato eliminado correctamente" });
+  } catch (error) {
+    console.error("❌ Error al eliminar contrato:", error);
+    res.status(500).json({ error: "Error al eliminar contrato" });
+  }
+});
+
+app.get('/api/localidades', async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .query('SELECT * FROM Localidades ORDER BY Empresa ASC');
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error('Error al obtener localidades:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+});
+
+
+app.put('/api/localidades/:id', async (req, res) => {
+  const id = req.params.id;
+  const db = await sql.connect(dbConfig);
+
+  try {
+    // Obtener la localidad original
+    const result = await db.request()
+      .input('IdLocalidad', sql.Int, id)
+      .query('SELECT * FROM Localidades WHERE IdLocalidad = @IdLocalidad');
+
+    const original = result.recordset[0];
+    if (!original) return res.status(404).json({ message: 'Localidad no encontrada' });
+
+    // Usar valores enviados o mantener los originales
+    const {
+      Empresa = original.Empresa,
+      Alias = original.Alias,
+      RazonSocial = original.RazonSocial,
+      Correo = original.Correo,
+      Dirreccion = original.Dirreccion,
+      Telefono = original.Telefono,
+      Provincia = original.Provincia,
+      Canton = original.Canton,
+      Distrito = original.Distrito,
+      Regimen = original.Regimen,
+      PieDocumento = original.PieDocumento,
+      PieProforma = original.PieProforma,
+      LimiteFact = original.LimiteFact,
+      MontoLicencia = original.MontoLicencia,
+      Logo = original.Logo,
+      Cuenta1 = original.Cuenta1,
+      Cuenta2 = original.Cuenta2,
+      Banco2 = original.Banco2,
+      Sinpe = original.Sinpe,
+      TipoCedula = original.TipoCedula,
+      NumeroCedula = original.NumeroCedula
+    } = req.body;
+
+    // Actualizar la base de datos
+    await db.request()
+      .input('IdLocalidad', sql.Int, id)
+      .input('Empresa', sql.NVarChar, Empresa)
+      .input('Alias', sql.NVarChar, Alias)
+      .input('RazonSocial', sql.NVarChar, RazonSocial)
+      .input('Correo', sql.NVarChar, Correo)
+      .input('Dirreccion', sql.NVarChar, Dirreccion)
+      .input('Telefono', sql.NVarChar, Telefono)
+      .input('Provincia', sql.NVarChar, Provincia)
+      .input('Canton', sql.NVarChar, Canton)
+      .input('Distrito', sql.NVarChar, Distrito)
+      .input('Regimen', sql.NVarChar, Regimen)
+      .input('PieDocumento', sql.NVarChar, PieDocumento)
+      .input('PieProforma', sql.NVarChar, PieProforma)
+      .input('LimiteFact', sql.Decimal(18, 2), LimiteFact)
+      .input('MontoLicencia', sql.Decimal(18, 2), MontoLicencia)
+      .input('Logo', sql.NVarChar(sql.MAX), Logo)
+      .input('Cuenta1', sql.NVarChar, Cuenta1)
+      .input('Cuenta2', sql.NVarChar, Cuenta2)
+      .input('Banco2', sql.NVarChar, Banco2)
+      .input('Sinpe', sql.NVarChar, Sinpe)
+      .input('TipoCedula', sql.NVarChar, TipoCedula)
+      .input('NumeroCedula', sql.NVarChar, NumeroCedula)
+      .query(`UPDATE Localidades SET
+        Empresa = @Empresa, Alias = @Alias, RazonSocial = @RazonSocial, Correo = @Correo,
+        Dirreccion = @Dirreccion, Telefono = @Telefono, Provincia = @Provincia, Canton = @Canton,
+        Distrito = @Distrito, Regimen = @Regimen, PieDocumento = @PieDocumento, PieProforma = @PieProforma,
+        LimiteFact = @LimiteFact, MontoLicencia = @MontoLicencia, Logo = @Logo,
+        Cuenta1 = @Cuenta1, Cuenta2 = @Cuenta2, Banco2 = @Banco2, Sinpe = @Sinpe,
+        TipoCedula = @TipoCedula, NumeroCedula = @NumeroCedula
+        WHERE IdLocalidad = @IdLocalidad`);
+
+    res.json({ message: 'Localidad actualizada correctamente' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error al actualizar la localidad' });
+  }
+});
+
+
+app.post('/api/verificar-acceso', async (req, res) => {
+  const { modulo, contraseña } = req.body;
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('Modulo', sql.VarChar, modulo)
+      .query('SELECT * FROM AccesosEmpresa WHERE Modulo = @Modulo');
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: 'No existe el módulo' });
+    }
+
+    const acceso = result.recordset[0];
+    if (acceso.Contraseña === contraseña) {
+      return res.json({ acceso: true });
+    } else {
+      return res.status(401).json({ message: 'Contraseña incorrecta' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error de servidor' });
   }
 });

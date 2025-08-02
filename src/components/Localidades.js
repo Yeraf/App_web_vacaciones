@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import VerLocalidadesModal from './VerLocalidadesModal';
 
 export const Localidades = () => {
   const [form, setForm] = useState({
@@ -9,6 +10,7 @@ export const Localidades = () => {
   });
 
   const [mensaje, setMensaje] = useState('');
+  const [mostrarModalLocalidades, setMostrarModalLocalidades] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -55,7 +57,12 @@ export const Localidades = () => {
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h3>Registrar Localidad</h3>
-        {mensaje && <div className="alert alert-info mb-0 py-1 px-3">{mensaje}</div>}
+        <div>
+          <button className="btn btn-secondary me-2" onClick={() => setMostrarModalLocalidades(true)}>
+            VER LOCALIDADES
+          </button>
+        </div>
+        {mensaje && <div className="alert alert-info mb-0 py-1 px-3 ms-3">{mensaje}</div>}
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -130,6 +137,11 @@ export const Localidades = () => {
 
         <button type="submit" className="btn btn-primary mt-3">Guardar</button>
       </form>
+
+      <VerLocalidadesModal
+        show={mostrarModalLocalidades}
+        onHide={() => setMostrarModalLocalidades(false)}
+      />
     </div>
   );
 };
