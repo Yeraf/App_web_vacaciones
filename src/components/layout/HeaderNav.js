@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react'; // Asegúrate de tener esta línea al inicio del archivo
+import Modal from 'react-bootstrap/Modal';
+import Button from 'react-bootstrap/Button';
 
 export const HeaderNav = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
   const [open, setOpen] = useState(false);
-
-  // const toggleSidebar = () => {
-  //   setSidebarOpen(!sidebarOpen);
-  // };
+  const [mostrarModalPassword, setMostrarModalPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const [errorPassword, setErrorPassword] = useState('');
 
   useEffect(() => {
     document.body.classList.add('sidebar-open');
@@ -24,7 +24,6 @@ export const HeaderNav = () => {
     const nuevoEstado = !sidebarOpen;
     setSidebarOpen(nuevoEstado);
 
-    // Ajusta clase del body para controlar el margen del contenido
     if (nuevoEstado) {
       document.body.classList.add('sidebar-open');
       document.body.classList.remove('sidebar-closed');
@@ -40,6 +39,25 @@ export const HeaderNav = () => {
   const handleLogout = () => {
     localStorage.removeItem('usuario');
     navigate('/login');
+  };
+
+  const verificarPassword = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/verificar-password-localidad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (data.autorizado) {
+        setMostrarModalPassword(false);
+        navigate('/localidad');
+      } else {
+        setErrorPassword('Contraseña incorrecta');
+      }
+    } catch (error) {
+      setErrorPassword('Error al verificar contraseña');
+    }
   };
 
   return (
@@ -61,24 +79,6 @@ export const HeaderNav = () => {
           <button className="hamburger" onClick={toggleSidebar}>&#9776;</button>
         </div>
       </div>
-      {/* <div className="topbar">
-        <div className="logo-topbar">
-          <img src="/images/alpaca.png" alt="Logo" className="logo_alpaca" />
-          <h3 className="nombre_empresa">YOKU ADMIN</h3>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          {usuario && (
-            <span className="text-light">👋 {usuario.Nombre}</span>
-          )}
-          <button onClick={handleLogout} className="btn btn-outline-light btn-sm">
-            Cerrar sesión
-          </button>
-          <button className="hamburger" onClick={toggleSidebar}>
-            &#9776;
-          </button>
-        </div>
-      </div> */}
 
       {/* SIDEBAR */}
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
@@ -121,7 +121,6 @@ export const HeaderNav = () => {
                 </NavLink>
               </li>
 
-
               <li className="nav-item">
                 <div
                   className="NavLink nav-link d-flex align-items-center justify-content-between"
@@ -135,33 +134,47 @@ export const HeaderNav = () => {
                     <img src="/images/empresa.png" className="logo_contacto me-2" alt="" />
                     <span className='text-white bold span-text-empresa'>EMPRESA</span>
                   </div>
-                  <i className="bi bi-chevron-down"></i> {/* Puedes usar otro ícono si quieres */}
+                  <i className="bi bi-chevron-down"></i>
                 </div>
 
                 <div id="collapseAcciones" className="collapse">
                   <div className=" py-2 collapse-inner rounded">
-                    <NavLink
-                      className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`}
-                      to="/localidad"
-                    >
+                    <button className="NavLink btn w-100 text-start" onClick={() => setMostrarModalPassword(true)}>
                       Localidad
-                    </NavLink>
+                    </button>
                   </div>
                 </div>
               </li>
-
-
 
               <li>
                 <NavLink className={({ isActive }) => `NavLink ${isActive ? "active" : ""}`} to="/contacto">
                   <img src='/images/auriculares.png' className='logo_contacto' alt="" /> CONTACTO
                 </NavLink>
               </li>
-
             </ul>
           </nav>
         </div>
       </aside>
+
+      <Modal show={mostrarModalPassword} onHide={() => setMostrarModalPassword(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Acceso a Localidad</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <input
+            type="password"
+            className="form-control"
+            placeholder="Contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {errorPassword && <p className="text-danger mt-2">{errorPassword}</p>}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setMostrarModalPassword(false)}>Cancelar</Button>
+          <Button variant="primary" onClick={verificarPassword}>Acceder</Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 };

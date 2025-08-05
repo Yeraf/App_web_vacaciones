@@ -2,6 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 
+
+const usuario = JSON.parse(localStorage.getItem('usuario'));
+const localidad = usuario?.Localidad || '';
+
 const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 export const Horarios = () => {
@@ -25,7 +29,25 @@ export const Horarios = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('empresasHorarios', JSON.stringify(empresas));
+    const empresasGuardadas = localStorage.getItem('empresasHorarios');
+    const tituloGuardado = localStorage.getItem('tituloSemana');
+    if (empresasGuardadas) {
+      const todas = JSON.parse(empresasGuardadas).map(e => ({
+        ...e,
+        colaboradoresHoras: e.colaboradoresHoras || []
+      }));
+
+      const filtradas = todas.filter(e => e.localidad === localidad);
+      setEmpresas(filtradas);
+    }
+    if (tituloGuardado) setTituloSemana(tituloGuardado);
+  }, []);
+
+  useEffect(() => {
+    const todasEmpresas = JSON.parse(localStorage.getItem('empresasHorarios')) || [];
+    const otrasEmpresas = todasEmpresas.filter(e => e.localidad !== localidad);
+    const actualizadas = [...otrasEmpresas, ...empresas.map(e => ({ ...e, localidad }))];
+    localStorage.setItem('empresasHorarios', JSON.stringify(actualizadas));
   }, [empresas]);
 
   useEffect(() => {
@@ -40,7 +62,10 @@ export const Horarios = () => {
   const agregarEmpresa = () => {
     const nuevoNombre = prompt("Ingrese el nombre de la empresa:");
     if (nuevoNombre) {
-      setEmpresas([...empresas, { nombre: nuevoNombre, horarios: [], colaboradoresHoras: [] }]);
+      setEmpresas([
+        ...empresas,
+        { nombre: nuevoNombre, localidad, horarios: [], colaboradoresHoras: [] }
+      ]);
     }
   };
 
@@ -101,23 +126,23 @@ export const Horarios = () => {
   return (
     <div className="p-4 text-white bg-gray-950 min-h-screen div-horarios">
       <h3 className="text-center text-xl font-bold mb-4 text-title-h3-horarios">Organizador de Horarios Semanal</h3>
-<div className='input-buttom-crear-empresa'>
-      <div className="text-center mb-6">
-        <button
-          className="bg-green-700 me-3 hover:bg-green-800 text-black px-3 py-1 rounded text-sm"
-          onClick={agregarEmpresa}
-        >
-          ➕ Agregar Empresa
-        </button>
-      </div>
+      <div className='input-buttom-crear-empresa'>
+        <div className="text-center mb-6">
+          <button
+            className="bg-green-700 me-3 hover:bg-green-800 text-black px-3 py-1 rounded text-sm"
+            onClick={agregarEmpresa}
+          >
+            ➕ Agregar Empresa
+          </button>
+        </div>
 
-      <div className="text-center mb-4">
-        <input
-          className="text-center p-1 rounded bg-white text-black text-sm"
-          value={tituloSemana}
-          onChange={(e) => setTituloSemana(e.target.value)}
-        />
-      </div>
+        <div className="text-center mb-4">
+          <input
+            className="text-center p-1 rounded bg-white text-black text-sm"
+            value={tituloSemana}
+            onChange={(e) => setTituloSemana(e.target.value)}
+          />
+        </div>
 
       </div>
 
@@ -131,7 +156,7 @@ export const Horarios = () => {
             >
               ❌
             </button></h3>
-            
+
           </div>
 
           {[['horarios', 'Tiempos Completos'], ['colaboradoresHoras', 'Colaboradores por Horas']].map(([tipo, titulo]) => {
@@ -218,7 +243,7 @@ export const Horarios = () => {
       {empresaPreview && (
         <div className="modal-overlay">
           <div className="modal-content animate-fadein">
-            
+
             <div ref={printRef} className="mt-6 text-black">
               <h2 className="text-center text-xl font-bold mb-1">{empresaPreview.empresa.nombre}</h2>
               <p className="text-center mb-4 text-sm font-semibold">{empresaPreview.titulo}</p>

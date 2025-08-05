@@ -561,8 +561,8 @@ export const Dashboard = () => {
     { id: "planilla", title: "PLANILLA", img: "/images/aglutinante.png" },
     { id: "financiamientos", title: "FINANCIAMIENTOS", img: "/images/financiar.png" },
     { id: "vales", title: "VALES", img: "/images/mano-con-dolar.png" },
-    { id: "aguinaldo", title: "AGUINALDO", img: "/images/disponible.png" },
-    { id: "contratos", title: "CONTRATO", img: "/images/disponible.png" },
+    { id: "aguinaldo", title: "AGUINALDO", img: "/images/aguinaldo.png" },
+    { id: "contratos", title: "CONTRATO", img: "/images/contrato.png" },
     // { id: "disponible3", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
@@ -1086,27 +1086,30 @@ export const Dashboard = () => {
   };
 
   const calcularPagoTotal = (form) => {
-    let ingresoBase = 0;
+  let ingresoBase = 0;
 
-    switch (form.TipoPago) {
-      case "Mensual":
-        ingresoBase = form.SalarioBase;
-        break;
-      case "Quincenal":
-        ingresoBase = form.SalarioBase / 2;
-        break;
-      case "Horas":
-        ingresoBase = form.SalarioBase * form.HorasTrabajadas;
-        break;
-    }
+  switch (form.TipoPago) {
+    case "Mensual":
+      ingresoBase = form.SalarioBase;
+      break;
+    case "Quincenal":
+      ingresoBase = form.SalarioBase / 2;
+      break;
+    case "Horas":
+      ingresoBase = form.HorasTrabajadas * form.MontoPorHoraExtra;
+      break;
+  }
 
-    const pagoHorasExtra = form.HorasExtra * form.MontoPorHoraExtra; // ← NUEVO cálculo
-    // const extras = form.HorasExtra * form.MontoPorHoraExtra; // ← usa lo ingresado
-    const ingresos = ingresoBase + form.Comisiones + form.Viaticos + pagoHorasExtra;
-    const egresos = form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
+  const pagoHorasExtra = form.HorasExtra * form.MontoPorHoraExtra;
 
-    return ingresos - egresos;
-  };
+  const ingresos =
+    ingresoBase + form.Comisiones + form.Viaticos + pagoHorasExtra;
+
+  const egresos =
+    form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
+
+  return ingresos - egresos;
+};
 
   const eliminarPago = async (id) => {
     if (!window.confirm("¿Desea eliminar este pago?")) return;
@@ -2064,7 +2067,13 @@ export const Dashboard = () => {
 
               ].map(([campo, tipo]) => (
                 <div key={campo} className="formulario-item">
-                  <label>{campo === "MontoPorHoraExtra" ? "₡ por Hora Extra" : campo}</label>
+                  <label>
+                    {campo === "MontoPorHoraExtra"
+                      ? pagoForm.TipoPago === "Horas"
+                        ? "₡ por Hora"
+                        : "₡ por Hora Extra"
+                      : campo}
+                  </label>
                   {tipo === "select" ? (
                     <select
                       className="form-control"

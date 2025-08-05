@@ -1926,3 +1926,71 @@ app.post('/api/verificar-acceso', async (req, res) => {
     res.status(500).json({ message: 'Error de servidor' });
   }
 });
+
+app.post('/api/verificar-password-localidad', async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ autorizado: false, message: "Contraseña requerida" });
+  }
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('Password', sql.VarChar, password)
+      .query(`
+        SELECT * 
+        FROM AccesosEmpresa 
+        WHERE Modulo = 'Noah Systems' AND Contraseña = @Password
+      `);
+
+    if (result.recordset.length > 0) {
+      return res.json({ autorizado: true });
+    } else {
+      return res.status(401).json({ autorizado: false, message: "Contraseña incorrecta" });
+    }
+
+  } catch (error) {
+    console.error('Error al verificar contraseña:', error);
+    return res.status(500).json({ autorizado: false, message: "Error del servidor" });
+  }
+});
+
+// Endpoint: GET /api/aguinaldo/:cedulaID?localidad=...
+
+app.get('/api/aguinaldo/:cedulaID', async (req, res) => {
+  const { cedulaID } = req.params;
+  const { localidad } = req.query;
+
+  const fechaInicio = `${new Date().getFullYear() - 1}-12-01`;
+  const fechaFin = `${new Date().getFullYear()}-11-30`;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('CedulaID', sql.VarChar, cedulaID)
+      .input('Empresa', sql.VarChar, localidad)
+      .input('FechaInicio', sql.Date, fechaInicio)
+      .input('FechaFin', sql.Date, fechaFin)
+      .query(`
+        SELECT FechaRegistro, TotalPago AS TotalBruto
+        FROM PagoPlanilla
+        WHERE CedulaID = @CedulaID
+        AND Empresa = @Empresa
+        AND FechaRegistro BETWEEN @FechaInicio AND @FechaFin
+      `);
+
+    const pagos = result.recordset;
+    const sumaTotal = pagos.reduce((sum, p) => sum + (parseFloat(p.TotalBruto) || 0), 0);
+    const aguinaldo = sumaTotal / 12;
+
+    res.json({
+      pagos,
+      aguinaldo
+    });
+
+  } catch (err) {
+    console.error("Error en cálculo de aguinaldo:", err);
+    res.status(500).json({ message: "Error en servidor al calcular aguinaldo" });
+  }
+});
