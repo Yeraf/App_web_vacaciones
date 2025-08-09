@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 
-
 const usuario = JSON.parse(localStorage.getItem('usuario'));
 const localidad = usuario?.Localidad || '';
 
@@ -88,6 +87,20 @@ export const Horarios = () => {
     };
     nuevaEmpresa[index][tipo].push(nuevaFila);
     setEmpresas(nuevaEmpresa);
+  };
+
+  // 🆕 Eliminar fila (sin tocar lo demás)
+  const eliminarFila = (empresaIdx, tipo, filaIdx) => {
+    const confirmar = window.confirm("¿Deseas quitar esta fila?");
+    if (!confirmar) return;
+
+    setEmpresas(prev => {
+      const copia = [...prev];
+      const arr = [...copia[empresaIdx][tipo]];
+      arr.splice(filaIdx, 1);
+      copia[empresaIdx] = { ...copia[empresaIdx], [tipo]: arr };
+      return copia;
+    });
   };
 
   const handleCambio = (empresaIdx, filaIdx, campo, valor, tipo) => {
@@ -178,6 +191,8 @@ export const Horarios = () => {
                     <table className="table-auto text-sm w-full border-collapse border border-gray-700">
                       <thead>
                         <tr>
+                          {/* 🆕 Columna de acción al frente */}
+                          <th className="border border-gray-600 p-1 bg-gray-700 text-white" style={{width: 70}}>Acción</th>
                           <th className="border border-gray-600 p-1 bg-gray-700 text-white">Horario</th>
                           <th className="border border-gray-600 p-1 bg-gray-700 text-white">Personal</th>
                           {diasSemana.map((dia) => (
@@ -188,6 +203,17 @@ export const Horarios = () => {
                       <tbody>
                         {empresa[tipo].map((fila, filaIdx) => (
                           <tr key={filaIdx}>
+                            {/* 🆕 Botón de eliminar fila, bien visible al inicio */}
+                            <td className="border border-gray-600 p-1 text-center">
+                              <button
+                                className="text-xs px-2 py-1 bg-red-600 rounded hover:bg-red-700"
+                                onClick={() => eliminarFila(idx, tipo, filaIdx)}
+                                title="Quitar esta fila"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+
                             <td className="border border-gray-600 p-1">
                               <input
                                 className="w-full p-1 text-xs text-black rounded bg-white"

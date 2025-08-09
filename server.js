@@ -1994,3 +1994,274 @@ app.get('/api/aguinaldo/:cedulaID', async (req, res) => {
     res.status(500).json({ message: "Error en servidor al calcular aguinaldo" });
   }
 });
+
+// ✅ AÑADIR: Aplicar abono parcial a un Vale (con transacción)
+app.post('/api/vales/aplicar-abono', async (req, res) => {
+  const { ValeID, CedulaID, Nombre, MontoAplicado, Observaciones, Empresa, PagoID } = req.body;
+
+  if (!ValeID || !Empresa || !MontoAplicado || MontoAplicado <= 0) {
+    return res.status(400).json({ message: "Datos inválidos para aplicar abono." });
+  }
+
+  const transaction = new sql.Transaction();
+
+  try {
+    await transaction.begin();
+
+    const request = new sql.Request(transaction);
+
+    // 1) Traer el vale con bloqueo para evitar condiciones de carrera
+    const { recordset } = await request
+      .input("ID", sql.Int, ValeID)
+      .query(`
+        SELECT ID, CedulaID, Nombre, FechaRegistro, MontoVale, Empresa, Motivo
+        FROM Vales WITH (UPDLOCK, ROWLOCK)
+        WHERE ID = @ID
+      `);
+
+    if (recordset.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Vale no encontrado." });
+    }
+
+    const vale = recordset[0];
+
+    // ✅ Validar que el abono no exceda el saldo
+    if (MontoAplicado > parseFloat(vale.MontoVale)) {
+      await transaction.rollback();
+      return res.status(400).json({ message: "El monto a aplicar excede el saldo del vale." });
+    }
+
+    const nuevoSaldo = parseFloat(vale.MontoVale) - parseFloat(MontoAplicado);
+
+    // 2) Registrar el abono en ValesPagados
+    await new sql.Request(transaction)
+      .input("ValeID", sql.Int, ValeID)
+      .input("CedulaID", sql.NVarChar, CedulaID || vale.CedulaID)
+      .input("Nombre", sql.NVarChar, Nombre || vale.Nombre)
+      .input("FechaPago", sql.Date, new Date())
+      .input("MontoAplicado", sql.Decimal(18, 2), MontoAplicado)
+      .input("Observaciones", sql.NVarChar(sql.MAX), Observaciones || 'Aplicado desde Planilla')
+      .input("Empresa", sql.NVarChar, Empresa)
+      .input("PagoID", sql.Int, PagoID || null) // si lo usas para revertir desde Pago
+      .query(`
+        INSERT INTO ValesPagados (ValeID, CedulaID, Nombre, FechaPago, MontoAplicado, Observaciones, Empresa, PagoID)
+        VALUES (@ValeID, @CedulaID, @Nombre, @FechaPago, @MontoAplicado, @Observaciones, @Empresa, @PagoID)
+      `);
+
+    // 3) Actualizar saldo del vale o eliminar si llega a cero
+    if (nuevoSaldo <= 0) {
+      await new sql.Request(transaction)
+        .input("ID", sql.Int, ValeID)
+        .query(`DELETE FROM Vales WHERE ID = @ID`);
+    } else {
+      await new sql.Request(transaction)
+        .input("ID", sql.Int, ValeID)
+        .input("NuevoSaldo", sql.Decimal(18, 2), nuevoSaldo)
+        .query(`
+          UPDATE Vales
+          SET MontoVale = @NuevoSaldo
+          WHERE ID = @ID
+        `);
+    }
+
+    await transaction.commit();
+    return res.json({ message: "Abono aplicado correctamente", nuevoSaldo });
+
+  } catch (err) {
+    console.error("❌ Error al aplicar abono a vale:", err);
+    try { await transaction.rollback(); } catch {}
+    return res.status(500).json({ message: "Error al aplicar abono" });
+  }
+});
+
+// ✅ NUEVO: obtener vale por ID (evita conflicto con /api/vales/:cedula)
+app.get("/api/vales/by-id/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input("ID", sql.Int, id)
+      .query("SELECT * FROM Vales WHERE ID = @ID");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ error: "Vale no encontrado" });
+    }
+
+    res.json(result.recordset[0]);
+  } catch (error) {
+    console.error("Error al obtener el vale por ID:", error);
+    res.status(500).json({ error: "Error al obtener el vale" });
+  }
+});
+
+// ✅ NUEVO: actualizar SOLO el monto del vale
+app.put("/api/vales/:id/monto", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { MontoVale } = req.body;
+
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("MontoVale", sql.Decimal(18, 2), MontoVale)
+      .query("UPDATE Vales SET MontoVale = @MontoVale WHERE ID = @ID");
+
+    res.json({ message: "Monto de vale actualizado correctamente" });
+  } catch (error) {
+    console.error("Error actualizando monto del vale:", error);
+    res.status(500).json({ error: "Error actualizando monto del vale" });
+  }
+});
+
+
+// ========== Buscar VALES pagados asociados a un pago de planilla ==========
+app.get("/api/vales-pagados/por-pago/:pagoID", async (req, res) => {
+  const pagoID = parseInt(req.params.pagoID);
+  if (isNaN(pagoID)) return res.status(400).json({ error: "pagoID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1) Traer el pago para conocer cedula, fecha y localidad
+    const pagoRes = await pool.request()
+      .input("ID", sql.Int, pagoID)
+      .query("SELECT TOP 1 CedulaID, FechaRegistro, Localidad FROM PagoPlanilla WHERE ID = @ID");
+
+    if (pagoRes.recordset.length === 0) {
+      return res.status(404).json({ error: "Pago no encontrado" });
+    }
+
+    const pago = pagoRes.recordset[0];
+
+    // 2) Traer ValesPagados de esa misma fecha/cedula/localidad registrados "desde planilla"
+    const resVales = await pool.request()
+      .input("CedulaID", sql.NVarChar, pago.CedulaID)
+      .input("Empresa", sql.NVarChar, pago.Localidad || "")
+      .input("Fecha", sql.Date, new Date(pago.FechaRegistro))
+      .query(`
+        SELECT ID, ValeID, CedulaID, Nombre, FechaPago, MontoAplicado, Observaciones, Empresa
+        FROM ValesPagados
+        WHERE CedulaID = @CedulaID
+          AND Empresa = @Empresa
+          AND CONVERT(date, FechaPago) = CONVERT(date, @Fecha)
+          AND Observaciones = 'Aplicado desde Planilla'
+        ORDER BY ID DESC
+      `);
+
+    res.json(resVales.recordset);
+  } catch (err) {
+    console.error("❌ Error en /api/vales-pagados/por-pago:", err);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ========== Buscar ABONOS de financiamiento asociados a un pago ==========
+app.get("/api/pagos-financiamiento/por-pago/:pagoID", async (req, res) => {
+  const pagoID = parseInt(req.params.pagoID);
+  if (isNaN(pagoID)) return res.status(400).json({ error: "pagoID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // 1) Traer el pago para conocer fecha y localidad
+    const pagoRes = await pool.request()
+      .input("ID", sql.Int, pagoID)
+      .query("SELECT TOP 1 FechaRegistro, Localidad FROM PagoPlanilla WHERE ID = @ID");
+
+    if (pagoRes.recordset.length === 0) {
+      return res.status(404).json({ error: "Pago no encontrado" });
+    }
+
+    const pago = pagoRes.recordset[0];
+
+    // 2) Traer abonos hechos ese día en esa localidad "desde planilla"
+    const resAbonos = await pool.request()
+      .input("Localidad", sql.NVarChar, pago.Localidad || "")
+      .input("Fecha", sql.Date, new Date(pago.FechaRegistro))
+      .query(`
+        SELECT ID, FinanciamientoID, FechaPago, MontoAplicado, Observaciones, Localidad
+        FROM PagosFinanciamiento
+        WHERE Localidad = @Localidad
+          AND CONVERT(date, FechaPago) = CONVERT(date, @Fecha)
+          AND Observaciones = 'Aplicado desde Planilla'
+        ORDER BY ID DESC
+      `);
+
+    res.json(resAbonos.recordset);
+  } catch (err) {
+    console.error("❌ Error en /api/pagos-financiamiento/por-pago:", err);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ========== Vale por ID (si aún no lo tienes así) ==========
+app.get("/api/vales/by-id/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const r = await pool.request().input("ID", sql.Int, id).query("SELECT * FROM Vales WHERE ID = @ID");
+    if (r.recordset.length === 0) return res.status(404).json({ error: "Vale no encontrado" });
+    res.json(r.recordset[0]);
+  } catch (e) {
+    console.error("❌ Error en /api/vales/by-id:", e);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ========== Actualizar SOLO el monto del vale ==========
+app.put("/api/vales/:id/monto", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { MontoVale } = req.body;
+  if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("MontoVale", sql.Decimal(18, 2), MontoVale || 0)
+      .query(`UPDATE Vales SET MontoVale = @MontoVale WHERE ID = @ID`);
+    res.json({ message: "Monto del vale actualizado" });
+  } catch (e) {
+    console.error("❌ Error en /api/vales/:id/monto:", e);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ========== Financiamiento por ID (si no lo tienes) ==========
+app.get("/api/financiamientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const r = await pool.request().input("ID", sql.Int, id)
+      .query("SELECT * FROM Financiamientos WHERE ID = @ID");
+    if (r.recordset.length === 0) return res.status(404).json({ error: "Financiamiento no encontrado" });
+    res.json(r.recordset[0]);
+  } catch (e) {
+    console.error("❌ Error en /api/financiamientos/:id:", e);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ========== Actualizar SOLO el monto pendiente del financiamiento ==========
+app.put("/api/financiamientos/:id/monto-pendiente", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { MontoPendiente } = req.body;
+  if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input("ID", sql.Int, id)
+      .input("MontoPendiente", sql.Decimal(18, 2), MontoPendiente || 0)
+      .query(`UPDATE Financiamientos SET MontoPendiente = @MontoPendiente WHERE ID = @ID`);
+    res.json({ message: "Monto pendiente actualizado" });
+  } catch (e) {
+    console.error("❌ Error en /api/financiamientos/:id/monto-pendiente:", e);
+    res.status(500).json({ error: "Error interno" });
+  }
+});

@@ -882,3 +882,11 @@ body.sidebar-closed .content_section {
   max-height: 90vh;
   overflow-y: auto;
 }
+
+.btn-guardar-pago-planilla {
+  margin-right: 6px;
+}
+
+.button-ver-pagos-historial {
+  margin-left: 6px;
+}

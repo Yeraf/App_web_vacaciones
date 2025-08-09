@@ -312,6 +312,19 @@ export const Dashboard = () => {
     }));
   };
 
+  // Abre el modal de historial y carga los pagos del colaborador seleccionado
+  const abrirHistorialPagos = (col) => {
+    setSelectedColaborador(col);
+
+    // Muestra el modal primero (UX más rápida)
+    setShowPagosModal(true);
+
+    // Carga el historial; si tu verPagosColaborador ya abre el modal, no pasa nada.
+    // Si verPagosColaborador devuelve una promesa, podrías hacer: await verPagosColaborador(col.CedulaID)
+    verPagosColaborador(col.CedulaID);
+  };
+
+
   const [vales, setVales] = useState([]);
 
   const obtenerVales = async () => {
@@ -653,77 +666,96 @@ export const Dashboard = () => {
         return alert("ID de pago no válido.");
       }
 
-      const confirmacion = window.confirm("¿Está seguro que desea eliminar este pago? Esta acción no se puede deshacer.");
+      const confirmacion = window.confirm(
+        "¿Está seguro que desea eliminar este pago? Esta acción no se puede deshacer."
+      );
       if (!confirmacion) return;
 
-      const hoy = new Date().toISOString().slice(0, 10);
       const pago = pagosColaborador.find(p => p.ID === pagoID);
-
       if (!pago) return alert("Pago no encontrado.");
 
-      const fechaPago = new Date(pago.FechaRegistro).toISOString().slice(0, 10);
-      if (fechaPago !== hoy) {
-        return alert("Solo se pueden eliminar pagos del día actual.");
+      // ✅ Ventana de 3 días
+      const hoy = new Date();
+      const fechaPago = new Date(pago.FechaRegistro);
+      const diffDias = Math.floor((hoy - fechaPago) / (1000 * 60 * 60 * 24));
+      if (diffDias > 3) {
+        return alert("Solo se pueden eliminar pagos dentro de los 3 días posteriores.");
       }
 
-      // 🔁 1. Revertir VALES pagados
+      // ===== 1) Revertir VALES pagados de ese pago =====
       if (pago.Vales && pago.Vales > 0) {
         const resVales = await fetch(`http://localhost:3001/api/vales-pagados/por-pago/${pagoID}`);
-        const valesPagados = await resVales.json();
+        if (!resVales.ok) {
+          console.error("No se pudieron obtener vales pagados asociados al pago");
+        } else {
+          const valesPagados = await resVales.json();
 
-        for (const vale of valesPagados) {
-          const resVale = await fetch(`http://localhost:3001/api/vales/${vale.ValeID}`);
-          const valeOriginal = await resVale.json();
-          const nuevoMonto = (valeOriginal.MontoVale || 0) + vale.MontoAplicado;
+          for (const vale of valesPagados) {
+            // Leer vale original
+            const resVale = await fetch(`http://localhost:3001/api/vales/by-id/${vale.ValeID}`);
+            if (!resVale.ok) continue;
+            const valeOriginal = await resVale.json();
 
-          if (valeOriginal?.ID) {
-            await fetch(`http://localhost:3001/api/vales/${vale.ValeID}`, {
+            const montoActual = parseFloat(valeOriginal.MontoVale) || 0;
+            const nuevoMonto = montoActual + (parseFloat(vale.MontoAplicado) || 0);
+
+            // Actualizar SOLO el monto del vale
+            await fetch(`http://localhost:3001/api/vales/${vale.ValeID}/monto`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ MontoVale: nuevoMonto })
             });
+
+            // Borrar registro de ValesPagados
+            await fetch(`http://localhost:3001/api/vales-pagados/${vale.ID}`, { method: "DELETE" });
           }
-
-          await fetch(`http://localhost:3001/api/vales-pagados/${vale.ID}`, { method: "DELETE" });
         }
       }
 
-      // 🔁 2. Revertir FINANCIAMIENTOS abonados
+      // ===== 2) Revertir ABONOS de financiamiento de ese pago =====
       if (pago.Prestamos && pago.Prestamos > 0) {
-        const resPagosFin = await fetch(`http://localhost:3001/api/pagos-financiamiento/por-pago/${pagoID}`);
-        const pagosFinanciamiento = await resPagosFin.json();
+        const resAbonos = await fetch(`http://localhost:3001/api/pagos-financiamiento/por-pago/${pagoID}`);
+        if (!resAbonos.ok) {
+          console.error("No se pudieron obtener abonos de financiamiento asociados al pago");
+        } else {
+          const pagosFinanciamiento = await resAbonos.json();
 
-        for (const abono of pagosFinanciamiento) {
-          const resFin = await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}`);
-          const finOriginal = await resFin.json();
-          const nuevoSaldo = (finOriginal.MontoPendiente || 0) + abono.MontoAplicado;
+          for (const abono of pagosFinanciamiento) {
+            // Traer financiamiento
+            const resFin = await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}`);
+            if (!resFin.ok) continue;
+            const finOriginal = await resFin.json();
 
-          await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ MontoPendiente: nuevoSaldo })
-          });
+            const saldoActual = parseFloat(finOriginal.MontoPendiente) || 0;
+            const nuevoSaldo = saldoActual + (parseFloat(abono.MontoAplicado) || 0);
 
-          await fetch(`http://localhost:3001/api/pagos-financiamiento/${abono.ID}`, { method: "DELETE" });
+            // Actualizar SOLO el saldo pendiente
+            await fetch(`http://localhost:3001/api/financiamientos/${abono.FinanciamientoID}/monto-pendiente`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ MontoPendiente: nuevoSaldo })
+            });
+
+            // Borrar abono
+            await fetch(`http://localhost:3001/api/pagos-financiamiento/${abono.ID}`, { method: "DELETE" });
+          }
         }
       }
 
-      // 🗑️ 3. Eliminar el pago de planilla
+      // ===== 3) Eliminar el pago de planilla =====
       const res = await fetch(`http://localhost:3001/api/pago-planilla/${pagoID}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar el pago");
 
       alert("Pago eliminado correctamente");
-
-      // 🔄 4. Refrescar vista
       setShowPagosModal(false);
       setPagoAEliminar(null);
       if (selectedColaborador) verPagosColaborador(selectedColaborador.CedulaID);
-
     } catch (error) {
       console.error("❌ Error al eliminar el pago:", error);
       alert("Error al eliminar el pago");
     }
   };
+
 
   const generarReportePagos = async () => {
     const localidad = localStorage.getItem("localidad");
@@ -1086,30 +1118,30 @@ export const Dashboard = () => {
   };
 
   const calcularPagoTotal = (form) => {
-  let ingresoBase = 0;
+    let ingresoBase = 0;
 
-  switch (form.TipoPago) {
-    case "Mensual":
-      ingresoBase = form.SalarioBase;
-      break;
-    case "Quincenal":
-      ingresoBase = form.SalarioBase / 2;
-      break;
-    case "Horas":
-      ingresoBase = form.HorasTrabajadas * form.MontoPorHoraExtra;
-      break;
-  }
+    switch (form.TipoPago) {
+      case "Mensual":
+        ingresoBase = form.SalarioBase;
+        break;
+      case "Quincenal":
+        ingresoBase = form.SalarioBase / 2;
+        break;
+      case "Horas":
+        ingresoBase = form.HorasTrabajadas * form.MontoPorHoraExtra;
+        break;
+    }
 
-  const pagoHorasExtra = form.HorasExtra * form.MontoPorHoraExtra;
+    const pagoHorasExtra = form.HorasExtra * form.MontoPorHoraExtra;
 
-  const ingresos =
-    ingresoBase + form.Comisiones + form.Viaticos + pagoHorasExtra;
+    const ingresos =
+      ingresoBase + form.Comisiones + form.Viaticos + pagoHorasExtra;
 
-  const egresos =
-    form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
+    const egresos =
+      form.CCSS + form.Prestamos + form.Vales + form.Adelantos + form.Ahorro;
 
-  return ingresos - egresos;
-};
+    return ingresos - egresos;
+  };
 
   const eliminarPago = async (id) => {
     if (!window.confirm("¿Desea eliminar este pago?")) return;
@@ -1236,7 +1268,7 @@ export const Dashboard = () => {
             })
           });
         } else if (p.tipo === "Vale") {
-          // 1. Registrar en tabla ValesPagados
+          // 1. Registrar en tabla ValesPagados (tu flujo actual)
           await fetch("http://localhost:3001/api/vales/pagado", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1251,18 +1283,25 @@ export const Dashboard = () => {
             })
           });
 
-          // 2. Obtener el monto actual y actualizar solo si queda saldo
-          const resVale = await fetch(`http://localhost:3001/api/vales/${p.id}`);
+          // 2. OBTENER vale por ID (nuevo endpoint específico)
+          const resVale = await fetch(`http://localhost:3001/api/vales/by-id/${p.id}`);
+          if (!resVale.ok) {
+            console.error("No se pudo obtener el vale por ID");
+            continue;
+          }
           const valeOriginal = await resVale.json();
 
-          const nuevoMonto = (valeOriginal.MontoVale || 0) - p.monto;
+          // Calcula nuevo saldo con seguridad numérica
+          const montoActual = parseFloat(valeOriginal.MontoVale) || 0;
+          const montoAplicado = parseFloat(p.monto) || 0;
+          const nuevoMonto = montoActual - montoAplicado;
 
           if (nuevoMonto <= 0) {
             // Si ya se pagó todo, eliminar
             await fetch(`http://localhost:3001/api/vales/${p.id}`, { method: "DELETE" });
           } else {
-            // Si queda saldo, actualizar el monto
-            await fetch(`http://localhost:3001/api/vales/${p.id}`, {
+            // Si queda saldo, actualizar SOLO el monto (nuevo endpoint)
+            await fetch(`http://localhost:3001/api/vales/${p.id}/monto`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ MontoVale: nuevoMonto })
@@ -2124,7 +2163,7 @@ export const Dashboard = () => {
             </p>
             <div className="text-end">
               <button className="btn btn-secondary me-2" onClick={cerrarModalCrearPago}>Cancelar</button>
-              <button className="btn btn-primary" onClick={guardarPagoPlanilla}>Guardar Pago</button>
+              <button className="btn btn-primary btn-guardar-pago-planilla" onClick={guardarPagoPlanilla}>Guardar Pago Planilla</button>
               <button
                 className="btn btn-info me-2"
                 onClick={() => cargarPendientes(selectedColaborador?.CedulaID)}
@@ -3290,6 +3329,13 @@ export const Dashboard = () => {
                       >
                         Ver Colillas
                       </button>
+                      {/* 👇 NUEVO: abre el mismo modal de “Pagos realizados a …” */}
+                      <button
+                        className="btn btn-sm btn-outline-info button-ver-pagos-historial"
+                        onClick={() => abrirHistorialPagos(colaborador)}
+                      >
+                        Ver pagos historial
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -3588,7 +3634,7 @@ export const Dashboard = () => {
                             setMostrarConfirmacionEliminar(true); // Muestra el modal
                           }}
                         >
-                          Eliminar -
+                          Eliminar Pago
                         </button>
                       </td>
                     </tr>
@@ -3791,7 +3837,7 @@ export const Dashboard = () => {
                   setShowVerPendientes(false);
                 }}
               >
-                Aplicar al Pago
+                Aplicar al Pago Pendientes
               </button>
               <button className="btn btn-secondary" onClick={() => setShowVerPendientes(false)}>Cerrar</button>
             </div>
