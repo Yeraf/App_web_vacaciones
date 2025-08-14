@@ -165,7 +165,7 @@ Nombre completo: _______________________________`;
   return (
     <div className="container mt-4">
       <EncabezadoEmpresa />
-      <h4>Contrato</h4>
+      <h4>Documento Legal</h4>
 
       <div className="row mb-2">
         <div className="col-md-4">

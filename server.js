@@ -236,19 +236,49 @@ app.delete('/api/vales/:id', async (req, res) => {
 });
 
 app.delete('/api/financiamientos/:id', async (req, res) => {
-  const id = req.params.id;
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: 'ID inválido' });
+  }
+
   try {
     const pool = await sql.connect(dbConfig);
-    await pool.request()
-      .input('ID', sql.Int, id)
-      .query('DELETE FROM Financiamientos WHERE ID = @ID');
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
 
-    res.status(200).json({ message: 'Financiamiento eliminado correctamente' });
+    // Usa la misma conexión/tx para todas las queries
+    const request = new sql.Request(tx).input('ID', sql.Int, id);
+
+    // 1) Verifica que exista
+    const existe = await request.query(`
+      SELECT ID FROM Financiamientos WHERE ID = @ID
+    `);
+    if (existe.recordset.length === 0) {
+      await tx.rollback();
+      return res.status(404).json({ message: 'Financiamiento no encontrado' });
+    }
+
+    // 2) Elimina primero los abonos ligados (tabla hija)
+    await request.query(`
+      DELETE FROM PagosFinanciamiento WHERE FinanciamientoID = @ID
+    `);
+
+    // 3) Elimina el financiamiento (tabla padre)
+    await request.query(`
+      DELETE FROM Financiamientos WHERE ID = @ID
+    `);
+
+    await tx.commit();
+    res.json({ message: 'Financiamiento eliminado correctamente' });
   } catch (err) {
-    console.error("Error al eliminar financiamiento:", err);
-    res.status(500).json({ message: "Error al eliminar financiamiento" });
+    console.error('❌ Error al eliminar financiamiento:', err);
+    res.status(500).json({
+      message: 'Error al eliminar financiamiento',
+      details: err?.originalError?.info?.message || err.message
+    });
   }
 });
+
 
 // POST - Guardar boleta de vacaciones
 app.post('/api/vacaciones', async (req, res) => {
