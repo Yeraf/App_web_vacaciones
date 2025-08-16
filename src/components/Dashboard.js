@@ -13,7 +13,6 @@ import { generarPDFVale } from "./ContenedorImpresionVale";
 import ContratoColaborador from './ContratoColaborador';
 import GestionContratos from "./GestionCotratos";
 
-
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
   const [colaboradores, setColaboradores] = useState([]);
@@ -102,6 +101,24 @@ export const Dashboard = () => {
   const [valeAEliminar, setValeAEliminar] = useState(null);
   const [eliminandoVale, setEliminandoVale] = useState(false);
 
+  // Aguinaldo: acciones
+  const [showConfirmEliminarAguinaldo, setShowConfirmEliminarAguinaldo] = useState(false);
+  const [aguinaldoAEliminar, setAguinaldoAEliminar] = useState(null);
+
+  // Pagos de aguinaldo (vista "VER pagos")
+  const [listaPagosAguinaldo, setListaPagosAguinaldo] = useState([]);
+
+  // VER pagos de aguinaldo
+  const [showModalVerPagosAguinaldo, setShowModalVerPagosAguinaldo] = useState(false);
+  const [colaboradorAguinaldo, setColaboradorAguinaldo] = useState(null);
+  const [pagosAguinaldo, setPagosAguinaldo] = useState([]);
+
+
+  // Modal de confirmación para eliminar colaborador
+  const [showConfirmEliminarCol, setShowConfirmEliminarCol] = useState(false);
+  const [colaboradorAEliminar, setColaboradorAEliminar] = useState(null);
+  const [eliminandoCol, setEliminandoCol] = useState(false);
+
   const [buscarVale, setBuscarVale] = useState("");
   const [paginaVales, setPaginaVales] = useState(1);
   const pageSizeVales = 8;
@@ -109,6 +126,34 @@ export const Dashboard = () => {
   const [filtroDesde, setFiltroDesde] = useState("");
   const [filtroHasta, setFiltroHasta] = useState("");
   const [rangoActivo, setRangoActivo] = useState(false);
+
+  // 📄 Lista y búsqueda/paginación de pagos de aguinaldo
+  const [aguinaldosGuardados, setAguinaldosGuardados] = useState([]);
+  const [busquedaAguinaldo, setBusquedaAguinaldo] = useState("");
+  const [paginaAguinaldos, setPaginaAguinaldos] = useState(1);
+  const pageSizeAguinaldos = 10;
+
+  // 👁️ Detalle/imprimir
+  const [showDetalleAguinaldo, setShowDetalleAguinaldo] = useState(false);
+  const [aguinaldoSeleccionado, setAguinaldoSeleccionado] = useState(null);
+
+
+
+  // Pagos de un colaborador
+  const [showPagosDeColab, setShowPagosDeColab] = useState(false);
+  const [colabSeleccionadoAguinaldo, setColabSeleccionadoAguinaldo] = useState(null);
+
+  // VER (lista de colaboradores para aguinaldo)
+  const [showListaAguinaldos, setShowListaAguinaldos] = useState(false);
+  const [colabsAguinaldo, setColabsAguinaldo] = useState([]);
+  const [searchColabAguinaldo, setSearchColabAguinaldo] = useState("");
+  const [pagColabPage, setPagColabPage] = useState(1);
+  const ROWS_AG = 10;
+
+  // Listado de colaboradores (VER)
+  const rowsColabAguinaldo = 10;
+
+  const colillasRef = useRef(null);
 
   const rowsPerPage = 5;
   const componentRef = useRef();
@@ -234,6 +279,41 @@ export const Dashboard = () => {
     }
   };
 
+  const getLocalidadLS = () => {
+    const ls = localStorage.getItem("localidad");
+    if (ls) return ls;
+    try {
+      const u = JSON.parse(localStorage.getItem("usuario") || "null");
+      return u?.Localidad || "";
+    } catch {
+      return "";
+    }
+  };
+
+  useEffect(() => {
+    if (!showListaAguinaldos) return;
+
+    (async () => {
+      try {
+        let localidad = localStorage.getItem("localidad") || "";
+        try {
+          const o = JSON.parse(localidad);
+          if (o && typeof o === "object") localidad = o.Localidad || o.Empresa || localidad;
+        } catch { /* era string */ }
+
+        const res = await fetch(
+          `http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`
+        );
+        const data = await res.json();
+        setColabsAguinaldo(Array.isArray(data) ? data : []);
+        setPagColabPage(1);
+      } catch (e) {
+        console.error("Error cargando colaboradores para VER aguinaldos:", e);
+        setColabsAguinaldo([]);
+      }
+    })();
+  }, [showListaAguinaldos]);
+
 
 
   useEffect(() => {
@@ -307,6 +387,713 @@ export const Dashboard = () => {
       console.error("Error al cargar detalle:", error);
     }
   };
+
+  // cerca de tus otros estados
+  const tablaReporteRef = useRef(null);
+
+  // imprime SOLAMENTE el contenido del reporte (sin filtros/botones)
+  const imprimirReportePagos = () => {
+    if (!tablaReporteRef.current) return;
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    const styles = `
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: Arial, sans-serif; margin: 0; padding: 16px; }
+      h3 { margin-top: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #222; padding: 6px; font-size: 12px; }
+      th { background: #eee; }
+      thead { display: table-header-group; }
+      tr, td, th { page-break-inside: avoid; }
+    </style>
+  `;
+
+    win.document.open();
+    win.document.write(`
+    <html>
+      <head>
+        <title>Reporte de Colillas</title>
+        ${styles}
+      </head>
+      <body>
+        ${tablaReporteRef.current.innerHTML}
+      </body>
+    </html>
+  `);
+    win.document.close();
+    win.focus();
+    // importante: esperar un tick para que el navegador pinte la tabla
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 50);
+  };
+
+  const imprimirSoloColillas = () => {
+    if (!colillasRef.current) return;
+
+    const win = window.open("", "_blank", "width=1100,height=800");
+
+    const styles = `
+    <style>
+      @page { size: A4 landscape; margin: 12mm; } /* 👈 Horizontal */
+      body { font-family: Arial, sans-serif; margin: 0; padding: 12px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #222; padding: 4px; font-size: 11px; vertical-align: middle; }
+      th { background: #eee; }
+      thead { display: table-header-group; }           /* encabezado en cada página */
+      tr, td, th { page-break-inside: avoid; }
+      .colilla { margin-bottom: 12px; }
+      /* Un poco de control de ancho para que quepa “Total Pago” */
+      /* Ajusta estos porcentajes si quieres más/menos espacio en alguna columna */
+      .colillas-wrap table colgroup col:nth-child(1) { width: 14%; } /* Nombre */
+      .colillas-wrap table colgroup col:nth-child(2) { width: 10%; } /* Cédula */
+      .colillas-wrap table colgroup col:nth-child(3) { width: 8%;  } /* Fecha */
+      .colillas-wrap table colgroup col:nth-child(4) { width: 7%;  } /* Horas Trabaj */
+      .colillas-wrap table colgroup col:nth-child(5) { width: 7%;  } /* Horas Extra */
+      .colillas-wrap table colgroup col:nth-child(6) { width: 8%;  } /* Comisiones */
+      .colillas-wrap table colgroup col:nth-child(7) { width: 8%;  } /* Viáticos */
+      .colillas-wrap table colgroup col:nth-child(8) { width: 7%;  } /* CCSS */
+      .colillas-wrap table colgroup col:nth-child(9) { width: 7%;  } /* Préstamos */
+      .colillas-wrap table colgroup col:nth-child(10){ width: 7%;  } /* Vales */
+      .colillas-wrap table colgroup col:nth-child(11){ width: 7%;  } /* Adelantos */
+      .colillas-wrap table colgroup col:nth-child(12){ width: 7%;  } /* Ahorro */
+      .colillas-wrap table colgroup col:nth-child(13){ width: 13%; } /* Total Pago */
+    </style>
+  `;
+
+    // Inyectamos un <colgroup> para fijar anchos de columnas
+    // (no altera tu HTML original)
+    const withColGroup = (html) => {
+      return html.replace(
+        /<table([^>]*)>/g,
+        `<table$1>
+        <colgroup>
+          <col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/>
+        </colgroup>`
+      );
+    };
+
+    const content = withColGroup(`
+    <div class="colillas-wrap">
+      ${colillasRef.current.innerHTML}
+    </div>
+  `);
+
+    win.document.open();
+    win.document.write(`
+    <html>
+      <head>
+        <title>Colillas de Pago</title>
+        ${styles}
+      </head>
+      <body>
+        ${content}
+      </body>
+    </html>
+  `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 80);
+  };
+
+  // === NUEVO: estado para el modal de generar pago de aguinaldo ===
+  const [showGenerarAguinaldo, setShowGenerarAguinaldo] = useState(false);
+
+  const [formPagoAguinaldo, setFormPagoAguinaldo] = useState({
+    CedulaID: "",
+    Nombre: "",
+    Empresa: "",
+    PeriodoDesde: "",
+    PeriodoHasta: "",
+    Monto: 0,
+    FechaPago: new Date().toISOString().slice(0, 10),
+    Observaciones: ""
+  });
+
+  // Periodo "oficial" 01/12 (año previo) — 30/11 (año actual)
+  const getPeriodoActual = () => {
+    const y = new Date().getFullYear();
+    return {
+      desde: `${y - 1}-12-01`,
+      hasta: `${y}-11-30`
+    };
+  };
+
+
+
+  // Abre el modal "Generar pago de aguinaldo"
+  // Respeta el rango activo si el usuario filtró, si no usa el periodo oficial.
+  // Verifica duplicado ANTES de abrir.
+  const abrirGenerarPagoAguinaldo = async () => {
+    try {
+      if (!selectedColaborador) return;
+
+      const usuario = JSON.parse(localStorage.getItem('usuario') || 'null');
+      const empresa =
+        localStorage.getItem('localidad') ||
+        usuario?.Localidad ||
+        "";
+
+      const periodo = getPeriodoActual();
+      const periodoDesde = (rangoActivo && filtroDesde) ? filtroDesde : periodo.desde;
+      const periodoHasta = (rangoActivo && filtroHasta) ? filtroHasta : periodo.hasta;
+
+      const monto = parseFloat(aguinaldoMostrado || 0) || 0;
+
+      // 1) Verificar si ya existe para ese período
+      const qs = new URLSearchParams({
+        cedulaID: selectedColaborador.CedulaID,
+        empresa,
+        desde: periodoDesde,
+        hasta: periodoHasta
+      }).toString();
+
+      const res = await fetch(`http://localhost:3001/api/aguinaldos-pagados/existe?${qs}`);
+      if (!res.ok) throw new Error("Error verificando pago de aguinaldo");
+
+      const { existe } = await res.json();
+      if (existe) {
+        alert("⚠️ Ya existe un pago de aguinaldo para este colaborador en ese período.");
+        return;
+      }
+
+      // 2) Prellenar y abrir modal
+      setFormPagoAguinaldo({
+        CedulaID: selectedColaborador.CedulaID,
+        Nombre: selectedColaborador.Nombre,
+        Empresa: empresa,
+        PeriodoDesde: periodoDesde,
+        PeriodoHasta: periodoHasta,
+        Monto: monto,
+        FechaPago: new Date().toISOString().slice(0, 10),
+        Observaciones: ""
+      });
+      setShowGenerarAguinaldo(true);
+
+    } catch (err) {
+      console.error("Error al preparar pago de aguinaldo:", err);
+      alert("No se pudo preparar el pago de aguinaldo.");
+    }
+  };
+
+  // Guarda el pago en BD
+  const guardarPagoAguinaldo = async () => {
+    try {
+      const res = await fetch("http://localhost:3001/api/aguinaldos-pagados", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formPagoAguinaldo)
+      });
+
+      if (res.status === 409) {
+        const j = await res.json();
+        alert(j.message || "Ya existe un pago de aguinaldo para ese período.");
+        return;
+      }
+      if (!res.ok) throw new Error("Error al guardar el pago");
+
+      alert("✅ Pago de aguinaldo registrado correctamente.");
+      setShowGenerarAguinaldo(false);
+
+    } catch (err) {
+      console.error("Error guardando pago de aguinaldo:", err);
+      alert("No se pudo guardar el pago de aguinaldo.");
+    }
+  };
+
+  const anyAguinaldoModalOpen =
+    showAguinaldoModal ||
+    showListaColaboradoresAguinaldo ||
+    showModalVerPagosAguinaldo; // suma otros modales de aguinaldo si tienes
+
+  // Obtiene localidad como usas en el resto de la app
+  const getLocalidad = () => {
+    const raw = localStorage.getItem("localidad");
+    if (raw) return raw;
+    try {
+      const usuario = JSON.parse(localStorage.getItem("usuario") || "null");
+      return usuario?.Localidad || "";
+    } catch {
+      return "";
+    }
+  };
+
+  // 🔎 Abrir lista de pagos de aguinaldo (filtrados por localidad)
+  const abrirListaAguinaldos = async () => {
+    try {
+      const loc = getLocalidad();
+      const res = await fetch(`http://localhost:3001/api/aguinaldos-pagados?localidad=${encodeURIComponent(loc)}`);
+      const data = await res.json();
+      setAguinaldosGuardados(Array.isArray(data) ? data : []);
+      setBusquedaAguinaldo("");
+      setPaginaAguinaldos(1);
+      setShowListaAguinaldos(true);
+    } catch (err) {
+      console.error("Error cargando aguinaldos pagados:", err);
+      alert("No se pudo cargar la lista de aguinaldos pagados.");
+    }
+  };
+
+  // 🗑️ Eliminar un pago de aguinaldo
+  const eliminarAguinaldoPago = async (id) => {
+    const ok = window.confirm("¿Seguro que deseas eliminar este pago de aguinaldo?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`http://localhost:3001/api/aguinaldos-pagados/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Error al eliminar en servidor");
+      // refrescar lista en memoria
+      setAguinaldosGuardados(prev => prev.filter(a => a.ID !== id));
+      // corregir paginación si quedaste fuera de rango
+      setPaginaAguinaldos(p => {
+        const total = Math.ceil((aguinaldosGuardados.length - 1) / pageSizeAguinaldos) || 1;
+        return Math.min(p, total);
+      });
+    } catch (err) {
+      console.error("Error eliminando aguinaldo:", err);
+      alert("No se pudo eliminar el registro.");
+    }
+  };
+
+  // 📄 Imprimir PDF del detalle seleccionado (usa tu html2pdf)
+  const imprimirAguinaldoPagadoPDF = () => {
+    const nodo = document.getElementById("vista-aguinaldo-pagado");
+    if (!nodo) return;
+    const nombreArchivo = `Aguinaldo_${aguinaldoSeleccionado?.Nombre || "Colaborador"}_${(aguinaldoSeleccionado?.PeriodoHasta || "").slice(0, 10)}.pdf`;
+
+    const opciones = {
+      margin: [10, 10, 10, 10],
+      filename: nombreArchivo,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opciones).from(nodo).save();
+  };
+
+  // Normaliza distintas formas de respuesta del backend a un array
+  const asArray = (data) => {
+    if (Array.isArray(data)) return data;
+    if (data?.pagos && Array.isArray(data.pagos)) return data.pagos;
+    if (data?.recordset && Array.isArray(data.recordset)) return data.recordset;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    return [];
+  };
+
+  const verPagosAguinaldoDe = async (col) => {
+    setColaboradorAguinaldo(col);
+
+    // Localidad desde localStorage (string o JSON)
+    let localidad = localStorage.getItem("localidad") || "";
+    try {
+      const o = JSON.parse(localidad);
+      if (o && typeof o === "object") localidad = o.Localidad || o.Empresa || localidad;
+    } catch { /* era string */ }
+
+    try {
+      // Endpoint principal (ajústalo si ya usas uno concreto)
+      const url = `http://localhost:3001/api/aguinaldos-pagados?cedulaID=${encodeURIComponent(col.CedulaID)}&localidad=${encodeURIComponent(localidad)}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("No ok");
+
+      const json = await res.json();
+      // Acepta varias formas: array directo, {pagos: [...]}, {recordset: [...]}
+      const rows = Array.isArray(json) ? json : (json.pagos || json.recordset || []);
+      const list = Array.isArray(rows) ? rows : [];
+
+      // Ordenar más recientes primero por FechaPago
+      list.sort((a, b) =>
+        new Date(b.FechaPago || b.FechaRegistro || 0) - new Date(a.FechaPago || a.FechaRegistro || 0)
+      );
+
+      setPagosAguinaldo(list);
+    } catch (e) {
+      console.error("Error cargando pagos de aguinaldo:", e);
+      setPagosAguinaldo([]);
+    }
+
+    // Abre solo este modal (no llames handleView ni cambies activeCard aquí)
+    setShowModalVerPagosAguinaldo(true);
+  };
+
+
+
+  const generarPDFFinanciamiento = async (fin) => {
+    // ——— Helpers ———
+    const formatMonto = (n) => Number(n || 0).toLocaleString('en-US');
+
+    // Quita encabezado si lo trae y devuelve solo la parte base64
+    const stripDataUrl = (s) => {
+      if (typeof s !== 'string') return '';
+      const i = s.indexOf('base64,');
+      return i >= 0 ? s.slice(i + 7) : s;
+    };
+
+    // Detectar MIME por firma base64 (PNG/JPEG)
+    const detectMime = (base64Raw) => {
+      const head = base64Raw.slice(0, 10);
+      if (head.startsWith('iVBOR')) return 'image/png'; // PNG
+      if (head.startsWith('/9j/')) return 'image/jpeg'; // JPEG
+      return 'image/png';
+    };
+
+    // Normaliza cualquier logo (dataURL, base64 crudo o URL) a dataURL válido
+    const normalizeLogoToDataUrl = async (logo) => {
+      if (!logo || typeof logo !== 'string') return null;
+
+      // 1) Si ya es dataURL válido
+      if (logo.startsWith('data:image/')) return logo;
+
+      // 2) Si parece base64 crudo
+      const looksLikeB64 = /^[A-Za-z0-9+/=\s]+$/.test(logo) && logo.replace(/\s/g, '').length > 100;
+      if (looksLikeB64) {
+        const raw = stripDataUrl(logo).replace(/\s/g, '');
+        const mime = detectMime(raw);
+        // Validación básica: longitud múltiplo de 4
+        if (raw.length % 4 !== 0) return null;
+        return `data:${mime};base64,${raw}`;
+      }
+
+      // 3) Si es URL: descargar y convertir a dataURL
+      try {
+        const res = await fetch(logo);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+        return typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')
+          ? dataUrl
+          : null;
+      } catch {
+        return null;
+      }
+    };
+
+    try {
+      const localidad = localStorage.getItem('localidad') || '';
+      let empresa = null;
+
+      // Cargar encabezado (empresa)
+      try {
+        const res = await fetch(`http://localhost:3001/api/localidades/${encodeURIComponent(localidad)}`);
+        if (res.ok) empresa = await res.json();
+      } catch { }
+
+      // 👇 Usa la importación que tengas en ese archivo:
+      // import { jsPDF } from 'jspdf'
+      const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      let y = 15;
+
+      const center = (texto, font = { family: 'times', style: 'normal', size: 11 }, dy = 6) => {
+        if (font.family) doc.setFont(font.family, font.style || 'normal');
+        if (font.size) doc.setFontSize(font.size);
+        const lines = doc.splitTextToSize(String(texto || ''), pageWidth - margin * 2);
+        lines.forEach((l) => {
+          if (!l) return;
+          doc.text(l, pageWidth / 2, y, { align: 'center' });
+          y += dy;
+        });
+      };
+
+      const fila = (label, value) => {
+        const texto = `${label}: ${value ?? ''}`;
+        const lines = doc.splitTextToSize(String(texto), pageWidth - margin * 2);
+        lines.forEach((l) => {
+          if (y > pageHeight - 30) { doc.addPage(); y = 20; }
+          doc.text(l, margin, y);
+          y += 6;
+        });
+      };
+
+      // ——— Encabezado con logo (si es válido) ———
+      try {
+        // empresa?.Logo viene como data:image/x-icon;base64,... en tu caso
+        const logoData = await toPngDataUrl(empresa?.Logo);
+        if (logoData) {
+          const logoW = 28;
+          const logoH = 25;
+          const x = (pageWidth - logoW) / 2;
+          doc.addImage(logoData, 'PNG', x, y, logoW, logoH);
+          y += logoH + 4;
+        }
+      } catch {
+        // Si el logo falla, continuamos sin él (evitamos PDF corrupto)
+      }
+
+      // ——— Texto del encabezado ———
+      if (empresa?.Empresa) center(empresa.Empresa, { family: 'times', style: 'bold', size: 13 }, 7);
+      if (empresa?.RazonSocial) center(empresa.RazonSocial, { size: 11 }, 6);
+
+      const lineaEnc = [
+        empresa?.NumeroCedula ? `N° Cédula: ${empresa.NumeroCedula}` : '',
+        empresa?.Correo ? `Correo: ${empresa.Correo}` : '',
+        empresa?.Telefono ? `Teléfono: ${empresa.Telefono}` : '',
+        (empresa?.Dirreccion || empresa?.Direccion) ? (empresa.Dirreccion || empresa.Direccion) : ''
+      ].filter(Boolean);
+      lineaEnc.forEach((t) => center(t, { size: 10 }, 5));
+
+      // Línea divisoria
+      doc.setLineWidth(0.4);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 8;
+
+      // ——— Título ———
+      doc.setFont('times', 'bold');
+      doc.setFontSize(14);
+      doc.text('FINANCIAMIENTO', pageWidth / 2, y, { align: 'center' });
+      y += 10;
+
+      // ——— Cuerpo ———
+      doc.setFont('times', 'normal');
+      doc.setFontSize(11);
+
+      const fecha = (fin.FechaCreacion || fin.FechaRegistro || '').toString().slice(0, 10);
+
+      fila('Nombre', fin.Nombre);
+      fila('Cédula', fin.CedulaID);
+      fila('Producto', fin.Producto);
+      fila('Monto', formatMonto(fin.Monto));                 // 150,000
+      fila('Pendiente', formatMonto(fin.MontoPendiente));    // 150,000
+      fila('Plazo', `${fin.Plazo} meses`);
+      fila('Interés', `${fin.InteresPorcentaje}%`);
+      if (fin.Descripcion) fila('Descripción', fin.Descripcion);
+      if (fecha) fila('Fecha', fecha);
+
+      // ——— Firmas ———
+      y += 14;
+      if (y > pageHeight - 40) { doc.addPage(); y = 30; }
+
+      const firmaLineWidth = 60;
+      const leftX1 = margin + 10;
+      const leftX2 = leftX1 + firmaLineWidth;
+      const rightX2 = pageWidth - margin - 10;
+      const rightX1 = rightX2 - firmaLineWidth;
+
+      doc.line(leftX1, y, leftX2, y);
+      doc.line(rightX1, y, rightX2, y);
+      y += 6;
+
+      doc.setFontSize(10);
+      doc.text('Firma de la persona colaboradora', (leftX1 + leftX2) / 2, y, { align: 'center' });
+      doc.text('Firma del/de la encargado(a)', (rightX1 + rightX2) / 2, y, { align: 'center' });
+
+      // ——— Guardar ———
+      doc.save(`Financiamiento_${(fin.Nombre || 'colaborador')}.pdf`);
+    } catch (e) {
+      console.error('Error generando PDF de financiamiento:', e);
+      alert('No se pudo generar el PDF del financiamiento.');
+    }
+  };
+
+  // Util: localidad y logo (reutiliza lo que ya guardas en LS)
+  const resolveLocalidad = () => {
+    try {
+      const u = JSON.parse(localStorage.getItem('usuario') || 'null');
+      if (u?.Localidad) return u.Localidad;
+    } catch { }
+    const loc = localStorage.getItem('localidad');
+    return loc || 'Empresa';
+  };
+
+  const getLogoEmpresaBase64 = () => {
+    // ajusta al key que ya usas para el logo (si tienes otro, cámbialo aquí)
+    return localStorage.getItem('logoEmpresaBase64') || '';
+  };
+
+  // ⚠️ Si ya tienes una función similar, conserva la tuya y usa ese nombre en el botón.
+  const imprimirAguinaldoPagado = (p) => {
+    try {
+      // Logo (usa el que tengas guardado)
+      const logo =
+        localStorage.getItem("logoEmpresaBase64") ||
+        localStorage.getItem("logoEmpresa") ||
+        ""; // base64 data URL o vacío
+
+      const locRaw = localStorage.getItem("localidad") || "";
+      let localidad = locRaw;
+      try { const o = JSON.parse(locRaw); localidad = o?.Localidad || o?.Empresa || locRaw; } catch { }
+
+      const cont = document.createElement("div");
+      cont.style.padding = "16px";
+      cont.innerHTML = `
+      <div style="font-family: Arial, sans-serif; width: 700px; margin: 0 auto;">
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
+          ${logo ? `<img src="${logo}" alt="Logo" style="height:60px;"/>` : ""}
+          <div>
+            <div style="font-size:18px; font-weight:bold;">${localidad || "Empresa"}</div>
+            <div style="font-size:13px; color:#555;">Comprobante de pago de Aguinaldo</div>
+          </div>
+        </div>
+        <hr />
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <tr>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Nombre:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;">${p.Nombre || ""}</td>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Cédula:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;">${p.CedulaID || ""}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Período:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;" colspan="3">
+              ${(p.PeriodoDesde || "").toString().slice(0, 10)} — ${(p.PeriodoHasta || "").toString().slice(0, 10)}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Fecha de pago:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;">${(p.FechaPago || "").toString().slice(0, 10)}</td>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Monto:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;">${Number(p.Monto || 0).toLocaleString("es-CR")}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px; border:1px solid #ccc;"><b>Observaciones:</b></td>
+            <td style="padding:6px; border:1px solid #ccc;" colspan="3">${p.Observaciones || "—"}</td>
+          </tr>
+        </table>
+        <div style="height:40px;"></div>
+        <div style="display:flex; justify-content:space-between; margin-top:32px;">
+          <div style="text-align:center;">
+            <div style="border-top:1px solid #000; width:240px; margin:0 auto;"></div>
+            <div style="font-size:12px; margin-top:6px;">Firma del Colaborador</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="border-top:1px solid #000; width:240px; margin:0 auto;"></div>
+            <div style="font-size:12px; margin-top:6px;">Firma del Encargado</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+      const opciones = {
+        margin: 10,
+        filename: `Aguinaldo_${(p.Nombre || "")}_${(p.FechaPago || "").toString().slice(0, 10)}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      };
+
+      // html2pdf ya lo usas en otros lados; aquí igual
+      // @ts-ignore
+      html2pdf().set(opciones).from(cont).save();
+    } catch (e) {
+      console.error("Error generando PDF de Aguinaldo pagado:", e);
+      alert("No se pudo generar el PDF.");
+    }
+  };
+
+  const eliminarAguinaldoPagado = async (p) => {
+    try {
+      // Si tienes un modal lindo de confirmación, úsalo.
+      // Aquí hago confirm simple; si ya tienes showConfirmEliminarAguinaldo/aguinaldoAEliminar, úsalo en su lugar.
+      const ok = window.confirm("¿Seguro que deseas eliminar este pago de aguinaldo?");
+      if (!ok) return;
+
+      const res = await fetch(`http://localhost:3001/api/aguinaldos-pagados/${p.ID}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("No se pudo eliminar");
+
+      // Vuelve a cargar la lista de pagos de este colaborador (tu función existente)
+      if (colaboradorAguinaldo) {
+        await verPagosAguinaldoDe(colaboradorAguinaldo);
+      } else {
+        // o filtra local
+        setPagosAguinaldo((prev) => prev.filter(x => x.ID !== p.ID));
+      }
+    } catch (err) {
+      console.error("Error al eliminar aguinaldo pagado:", err);
+      alert("Error al eliminar el registro.");
+    }
+  };
+
+  const filteredColabsAg = colabsAguinaldo.filter((c) => {
+    // localidad del colaborador y del usuario actual
+    const locColab = (c.Empresa || c.Localidad || "").toString().toLowerCase();
+    let locActual = (localStorage.getItem("localidad") || "").toString();
+    try {
+      const o = JSON.parse(locActual);
+      if (o && typeof o === "object") locActual = o.Localidad || o.Empresa || locActual;
+    } catch { }
+    locActual = locActual.toLowerCase();
+
+    const matchesLoc = !locActual || locColab === locActual;
+
+    const s = (searchColabAguinaldo || "").toLowerCase();
+    const matchesSearch =
+      !s ||
+      c.CedulaID?.toLowerCase().includes(s) ||
+      c.Nombre?.toLowerCase().includes(s) ||
+      c.Apellidos?.toLowerCase().includes(s);
+
+    return matchesLoc && matchesSearch;
+  });
+
+
+  const fmtCRC = (n) => `₡${(Number(n) || 0).toLocaleString('es-CR')}`;
+
+  const abrirListadoAguinaldos = async () => {
+    try {
+      const localidad = localStorage.getItem("localidad") || "";
+      const res = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setColabsAguinaldo(data || []);
+      setSearchColabAguinaldo("");
+      setPagColabPage(1);
+      setShowListaAguinaldos(true);
+    } catch (e) {
+      console.error("Error cargando colaboradores (VER aguinaldo):", e);
+      setColabsAguinaldo([]);
+      setShowListaAguinaldos(true);
+    }
+  };
+
+  const eliminarPagoAguinaldo = async (pagoID) => {
+    const ok = window.confirm("¿Seguro que deseas eliminar este pago de aguinaldo?");
+    if (!ok) return;
+
+    try {
+      // 👇 Ajusta si tu endpoint es otro (propuesto: /api/aguinaldo/pagos/:id)
+      const res = await fetch(`http://localhost:3001/api/aguinaldo/pagos/${pagoID}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Error al eliminar el pago");
+      // Refrescar la lista del colaborador
+      if (colabSeleccionadoAguinaldo) {
+        await verPagosAguinaldoDe(colabSeleccionadoAguinaldo);
+      }
+      alert("Pago de aguinaldo eliminado correctamente.");
+    } catch (e) {
+      console.error("Error eliminando pago aguinaldo:", e);
+      alert("No se pudo eliminar el pago.");
+    }
+  };
+
+  const imprimirPagosAguinaldoDe = () => {
+    const el = document.getElementById("imp-agui-colab");
+    if (!el || !colabSeleccionadoAguinaldo) return;
+
+    const opciones = {
+      margin: 10,
+      filename: `Aguinaldos_${colabSeleccionadoAguinaldo.Nombre}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    };
+
+    // Necesitas tener html2pdf cargado (ya lo usas en otras partes)
+    // eslint-disable-next-line no-undef
+    html2pdf().set(opciones).from(el).save();
+  };
+
+
 
 
   // ► Lista que realmente se muestra: completa o filtrada por rango
@@ -610,6 +1397,45 @@ export const Dashboard = () => {
     setPaginaBoletas(nuevaPagina);
   };
 
+  // Carga una imagen y devuelve el elemento <img> cuando esté lista
+  const loadImage = (src) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+
+  // Normaliza cualquier logo (ICO/base64/URL) a un dataURL PNG compatible con jsPDF
+  const toPngDataUrl = async (dataUrlOrBase64) => {
+    if (!dataUrlOrBase64 || typeof dataUrlOrBase64 !== 'string') return null;
+    let dataUrl = dataUrlOrBase64.trim();
+
+    // Si viene como base64 crudo (sin encabezado data:)
+    if (!dataUrl.startsWith('data:') && /^[A-Za-z0-9+/=\s]+$/.test(dataUrl)) {
+      dataUrl = 'data:image/png;base64,' + dataUrl.replace(/\s/g, '');
+    }
+
+    // Si ya es PNG/JPEG válido, úsalo tal cual
+    if (dataUrl.startsWith('data:image/png') || dataUrl.startsWith('data:image/jpeg')) {
+      return dataUrl;
+    }
+
+    // Para ICO u otros formatos (data:image/x-icon, etc.), conviértelo a PNG vía canvas
+    try {
+      const img = await loadImage(dataUrl);
+      const canvas = document.createElement('canvas');
+      // usa tamaño natural si existe; si no, asume 128x128
+      canvas.width = img.width || 128;
+      canvas.height = img.height || 128;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    } catch {
+      return null; // si falla el logo, seguimos sin logo (mejor que PDF corrupto)
+    }
+  };
+
 
   const calcularDias = (fechaIngreso, cedula) => {
     const hoy = new Date();
@@ -627,6 +1453,9 @@ export const Dashboard = () => {
     const f2 = new Date(fin);
     return Math.floor((f2 - f1) / (1000 * 60 * 60 * 24)) + 1;
   };
+
+  const pageStart = (pagColabPage - 1) * ROWS_AG;
+  const startIdxAg = (pagColabPage - 1) * rowsColabAguinaldo;
 
   const generarNumeroBoleta = async () => {
     try {
@@ -865,6 +1694,36 @@ export const Dashboard = () => {
     } catch (error) {
       console.error("❌ Error al eliminar el pago:", error);
       alert("Error al eliminar el pago");
+    }
+  };
+
+  /**
+   * Elimina el registro seleccionado (aguinaldoAEliminar) y refresca la lista.
+   * Se usa desde el modal de confirmación "bonito".
+   */
+  const eliminarAguinaldoPagadoConfirmado = async () => {
+    if (!aguinaldoAEliminar) return;
+    try {
+      const res = await fetch(
+        `http://localhost:3001/api/aguinaldos-pagados/${aguinaldoAEliminar.ID}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("No se pudo eliminar");
+
+      // Refresca la tabla de pagos del colaborador
+      if (colaboradorAguinaldo) {
+        await verPagosAguinaldoDe(colaboradorAguinaldo);
+      } else {
+        // Fallback local si no hay colaborador seleccionado
+        setPagosAguinaldo(prev => (prev || []).filter(p => p.ID !== aguinaldoAEliminar.ID));
+      }
+
+      // Cierra confirmación y limpia selección
+      setShowConfirmEliminarAguinaldo(false);
+      setAguinaldoAEliminar(null);
+    } catch (err) {
+      console.error("Error al eliminar aguinaldo pagado:", err);
+      alert("Error al eliminar el registro.");
     }
   };
 
@@ -1193,12 +2052,19 @@ export const Dashboard = () => {
   };
 
   const handleDeleteColaborador = async (id) => {
-    if (!window.confirm("¿Está seguro de que desea eliminar este colaborador?")) return;
     try {
+      setEliminandoCol(true);
       await fetch(`http://localhost:3001/api/colaboradores/${id}`, { method: "DELETE" });
-      handleView("colaboradores"); // Refrescar lista
+      // Cierra modal y limpia
+      setShowConfirmEliminarCol(false);
+      setColaboradorAEliminar(null);
+      // Refresca la lista como ya hacías
+      handleView("colaboradores");
     } catch (error) {
       console.error("Error al eliminar:", error);
+      alert("Ocurrió un error al eliminar el colaborador.");
+    } finally {
+      setEliminandoCol(false);
     }
   };
 
@@ -1335,6 +2201,12 @@ export const Dashboard = () => {
       alert("Ocurrió un error al exportar el Excel.");
     }
   };
+
+  const pageSlice = filteredColabsAg.slice(pageStart, pageStart + ROWS_AG);
+
+  const totalPagesAg = Math.max(1, Math.ceil(filteredColabsAg.length / rowsColabAguinaldo));
+
+  const pageColabsAg = filteredColabsAg.slice(startIdxAg, startIdxAg + rowsColabAguinaldo);
 
   const guardarPagoPlanilla = async () => {
     try {
@@ -1819,7 +2691,10 @@ export const Dashboard = () => {
                       </button>
                       <button
                         className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteColaborador(colaborador.ID)}
+                        onClick={() => {
+                          setColaboradorAEliminar(colaborador); // guarda todo el colaborador
+                          setShowConfirmEliminarCol(true);      // abre modal bonito
+                        }}
                       >
                         Eliminar
                       </button>
@@ -2034,6 +2909,10 @@ export const Dashboard = () => {
                   else if (card.id === "vacaciones") {
                     obtenerTodasBoletas(); // 👈 esta función ya la tiene implementada
                     setMostrarModalListadoBoletas(true); // 👈 activa el modal
+                    setActiveCard(card.id);
+                    // 👇 NUEVO: abre tu flujo de Aguinaldo (selector de colaborador + cálculo)
+                  } else if (card.id === "aguinaldo" || card.id === "aguinaldos") {
+                    abrirListadoAguinaldos();   // 👈 NUEVO: listado/paginación + ver/eliminar pagos
                     setActiveCard(card.id);
                   }
                   else {
@@ -2641,7 +3520,84 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showModalVerPagosAguinaldo && (
+        <div className="modal-overlay" onClick={() => setShowModalVerPagosAguinaldo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Aguinaldos — {colaboradorAguinaldo?.Nombre}</h4>
+            <p className="text-muted">
+              Localidad: {(() => {
+                let loc = localStorage.getItem("localidad") || "";
+                try { const o = JSON.parse(loc); loc = o?.Localidad || o?.Empresa || loc; } catch { }
+                return loc || "—";
+              })()}
+            </p>
 
+            {pagosAguinaldo.length === 0 ? (
+              <div className="alert alert-info">Sin pagos registrados para este colaborador.</div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover table-striped">
+                  <thead className="table-dark">
+                    <tr>
+                      <th>Fecha pago</th>
+                      <th>Período (desde — hasta)</th>
+                      <th>Monto</th>
+                      <th>Observaciones</th>
+                      <th>Acciones</th> {/* 👈 NUEVO */}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagosAguinaldo.map((p, i) => (
+                      <tr key={p.ID || i}>
+                        <td>{(p.FechaPago || "").toString().slice(0, 10)}</td>
+                        <td>
+                          {(p.PeriodoDesde || "").toString().slice(0, 10)} — {(p.PeriodoHasta || "").toString().slice(0, 10)}
+                        </td>
+                        <td>₡{Number(p.Monto || 0).toLocaleString("es-CR")}</td>
+                        <td>{p.Observaciones || "—"}</td>
+                        <td className="text-nowrap">
+                          <button
+                            className="btn btn-sm btn-outline-primary me-2"
+                            onClick={() => imprimirAguinaldoPagado(p)}
+                            title="Descargar PDF"
+                          >
+                            PDF
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => {
+                              setAguinaldoAEliminar(p);
+                              setShowConfirmEliminarAguinaldo(true);
+                            }}
+                          >
+                            Eliminar
+                          </button>
+
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+            )}
+
+            <div className="text-end">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowModalVerPagosAguinaldo(false); // cierra este modal
+                  setColaboradorAguinaldo(null);        // limpia selección (opcional pero recomendable)
+                  setPagosAguinaldo([]);                // limpia lista (opcional)
+                  setActiveCard(null);                  // evita que aparezca “Selecciona una opción”
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de detalles */}
 
@@ -2874,7 +3830,6 @@ export const Dashboard = () => {
               {/* 👇 Usa la lista que corresponde (filtrada o completa) */}
               {(() => {
                 const pagosAMostrar = getPagosParaMostrar();
-
                 return (
                   <>
                     <div className="row">
@@ -2903,11 +3858,21 @@ export const Dashboard = () => {
                     </div>
 
                     <p className="mt-3 text-end">
-  <strong>Total de Pagos: ₡{totalBrutoMostrado.toLocaleString()}</strong>
-</p>
+                      <strong>Total de Pagos: ₡{totalBrutoMostrado.toLocaleString()}</strong>
+                    </p>
                   </>
                 );
               })()}
+            </div>
+
+            {/* 👇👇 NUEVO: botón para generar pago (no afecta impresión) */}
+            <div className="no-print text-start mt-2">
+              <button
+                className="btn btn-outline-success"
+                onClick={abrirGenerarPagoAguinaldo}
+              >
+                Generar pago de aguinaldo
+              </button>
             </div>
 
             <div className="d-flex justify-content-between mt-3">
@@ -2918,6 +3883,8 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+
       {showListaColaboradoresAguinaldo && (
         <div className="modal-overlay" onClick={() => setShowListaColaboradoresAguinaldo(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -3560,7 +4527,8 @@ export const Dashboard = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Reporte de Pagos por Rango de Fechas</h3>
 
-            <div className="d-flex gap-3 mb-3">
+            {/* Filtros - NO se imprimen */}
+            <div className="d-flex gap-3 mb-3 no-print">
               <div>
                 <label>Desde:</label>
                 <input
@@ -3585,7 +4553,9 @@ export const Dashboard = () => {
                   onClick={async () => {
                     try {
                       const localidad = localStorage.getItem("localidad");
-                      const res = await fetch(`http://localhost:3001/api/reporte-pagos?inicio=${fechaInicioReporte}&fin=${fechaFinReporte}&localidad=${encodeURIComponent(localidad)}`);
+                      const res = await fetch(
+                        `http://localhost:3001/api/reporte-pagos?inicio=${fechaInicioReporte}&fin=${fechaFinReporte}&localidad=${encodeURIComponent(localidad)}`
+                      );
                       const data = await res.json();
                       setPagosFiltrados(data);
                     } catch (err) {
@@ -3598,55 +4568,298 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            <div className="table-responsive">
-              <table className="table table-bordered table-striped">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Cédula</th>
-                    <th>Fecha</th>
-                    <th>Total Pago</th>
-                    <th>Horas Trabajadas</th>
-                    <th>Horas Extra</th>
-                    <th>Comisiones</th>
-                    <th>Viáticos</th>
-                    <th>CCSS</th>
-                    <th>Préstamos</th>
-                    <th>Vales</th>
-                    <th>Adelantos</th>
-                    <th>Ahorro</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagosFiltrados.map((pago, index) => (
-                    <tr key={index}>
-                      <td>{pago.Nombre}</td>
-                      <td>{pago.CedulaID}</td>
-                      <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-                      <td>₡{pago.TotalPago.toLocaleString()}</td>
-                      <td>{pago.HorasTrabajadas}</td>
-                      <td>{pago.HorasExtra}</td>
-                      <td>₡{pago.Comisiones.toLocaleString()}</td>
-                      <td>₡{pago.Viaticos.toLocaleString()}</td>
-                      <td>₡{pago.CCSS.toLocaleString()}</td>
-                      <td>₡{pago.Prestamos.toLocaleString()}</td>
-                      <td>₡{pago.Vales.toLocaleString()}</td>
-                      <td>₡{pago.Adelantos.toLocaleString()}</td>
-                      <td>₡{pago.Ahorro.toLocaleString()}</td>
+            {/* SOLO esto se imprime */}
+            <div ref={tablaReporteRef}>
+              <div className="table-responsive">
+                <table className="table table-bordered table-striped">
+                  <thead className="table-dark">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Cédula</th>
+                      <th>Fecha</th>
+                      <th>Total Pago</th>
+                      <th>Horas Trabajadas</th>
+                      <th>Horas Extra</th>
+                      <th>Comisiones</th>
+                      <th>Viáticos</th>
+                      <th>CCSS</th>
+                      <th>Préstamos</th>
+                      <th>Vales</th>
+                      <th>Adelantos</th>
+                      <th>Ahorro</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {pagosFiltrados.map((pago, index) => (
+                      <tr key={index}>
+                        <td>{pago.Nombre}</td>
+                        <td>{pago.CedulaID}</td>
+                        <td>{pago.FechaRegistro?.slice(0, 10)}</td>
+                        <td>₡{pago.TotalPago.toLocaleString()}</td>
+                        <td>{pago.HorasTrabajadas}</td>
+                        <td>{pago.HorasExtra}</td>
+                        <td>₡{pago.Comisiones.toLocaleString()}</td>
+                        <td>₡{pago.Viaticos.toLocaleString()}</td>
+                        <td>₡{pago.CCSS.toLocaleString()}</td>
+                        <td>₡{pago.Prestamos.toLocaleString()}</td>
+                        <td>₡{pago.Vales.toLocaleString()}</td>
+                        <td>₡{pago.Adelantos.toLocaleString()}</td>
+                        <td>₡{pago.Ahorro.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div className="text-end">
+            {/* Botones - NO se imprimen */}
+            <div className="text-end no-print">
               <button className="btn btn-secondary" onClick={() => setShowReporteTabla(false)}>Cerrar</button>
-              <button className="btn btn-outline-primary me-2" onClick={() => window.print()}>
+              <button className="btn btn-outline-primary me-2" onClick={imprimirReportePagos}>
                 Imprimir
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* 
+      {showListaAguinaldos && (
+        <div className="modal-overlay" onClick={() => setShowListaAguinaldos(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
+            <h4>Pagos de Aguinaldo — {getLocalidad()}</h4>
 
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <input
+                type="text"
+                className="form-control me-2"
+                placeholder="Buscar por nombre o cédula..."
+                style={{ maxWidth: 320 }}
+                value={busquedaAguinaldo}
+                onChange={(e) => { setBusquedaAguinaldo(e.target.value); setPaginaAguinaldos(1); }}
+              />
+              <span className="text-muted">Total: {
+                aguinaldosGuardados.length
+              }</span>
+            </div>
+
+            {(() => {
+              const filtro = (busquedaAguinaldo || "").toLowerCase();
+              const filtrados = aguinaldosGuardados.filter(a =>
+                (a.Nombre || "").toLowerCase().includes(filtro) ||
+                (a.CedulaID || "").toLowerCase().includes(filtro)
+              );
+
+              const totalPaginas = Math.max(1, Math.ceil(filtrados.length / pageSizeAguinaldos));
+              const pag = Math.min(paginaAguinaldos, totalPaginas);
+              const start = (pag - 1) * pageSizeAguinaldos;
+              const pageItems = filtrados.slice(start, start + pageSizeAguinaldos);
+
+              return (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-bordered table-hover table-striped">
+                      <thead className="table-dark">
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Cédula</th>
+                          <th>Periodo</th>
+                          <th>Monto</th>
+                          <th>Fecha pago</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageItems.length > 0 ? pageItems.map((a) => (
+                          <tr key={a.ID}>
+                            <td>{a.Nombre}</td>
+                            <td>{a.CedulaID}</td>
+                            <td>{a.PeriodoDesde?.slice(0, 10)} — {a.PeriodoHasta?.slice(0, 10)}</td>
+                            <td>₡{parseFloat(a.Monto || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</td>
+                            <td>{a.FechaPago?.slice(0, 10)}</td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-info me-2"
+                                onClick={() => { setAguinaldoSeleccionado(a); setShowDetalleAguinaldo(true); }}
+                              >
+                                Ver
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => eliminarAguinaldoPago(a.ID)}
+                              >
+                                Eliminar
+                              </button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan="6" className="text-center text-muted">No hay registros</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="d-flex justify-content-between align-items-center mt-2">
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      disabled={pag <= 1}
+                      onClick={() => setPaginaAguinaldos(p => Math.max(1, p - 1))}
+                    >
+                      &lt; Anterior
+                    </button>
+                    <span>Página {pag} de {totalPaginas}</span>
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      disabled={pag >= totalPaginas}
+                      onClick={() => setPaginaAguinaldos(p => Math.min(totalPaginas, p + 1))}
+                    >
+                      Siguiente &gt;
+                    </button>
+                  </div>
+
+                  <div className="text-end mt-3">
+                    <button className="btn btn-secondary" onClick={() => setShowListaAguinaldos(false)}>Cerrar</button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )} */}
+
+      {showDetalleAguinaldo && aguinaldoSeleccionado && (
+        <div className="modal-overlay" onClick={() => setShowDetalleAguinaldo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+            {/* 🖨️ Contenido imprimible */}
+            <div id="vista-aguinaldo-pagado" style={{ padding: 16 }}>
+              {/* Encabezado centrado con logo (si lo tienes en LS) */}
+              <div style={{ textAlign: "center", marginBottom: 8 }}>
+                {(() => {
+                  const logo = localStorage.getItem('logoEmpresaBase64') || ""; // Si tu clave es otra, cámbiala aquí
+                  if (logo) {
+                    return <img src={logo} alt="Logo" style={{ maxHeight: 70, marginBottom: 6 }} />;
+                  }
+                  return null;
+                })()}
+                <h5 style={{ margin: 0 }}>{getLocalidad() || "Empresa"}</h5>
+                <div style={{ borderBottom: "1px solid #999", marginTop: 6 }} />
+              </div>
+
+              <h4 className="text-center" style={{ marginTop: 10 }}>COMPROBANTE DE PAGO DE AGUINALDO</h4>
+
+              <table className="table table-sm table-bordered" style={{ marginTop: 12 }}>
+                <tbody>
+                  <tr>
+                    <th>Colaborador</th>
+                    <td>{aguinaldoSeleccionado.Nombre}</td>
+                    <th>Cédula</th>
+                    <td>{aguinaldoSeleccionado.CedulaID}</td>
+                  </tr>
+                  <tr>
+                    <th>Empresa</th>
+                    <td>{aguinaldoSeleccionado.Empresa}</td>
+                    <th>Fecha de pago</th>
+                    <td>{aguinaldoSeleccionado.FechaPago?.slice(0, 10)}</td>
+                  </tr>
+                  <tr>
+                    <th>Período</th>
+                    <td colSpan={3}>
+                      {aguinaldoSeleccionado.PeriodoDesde?.slice(0, 10)} — {aguinaldoSeleccionado.PeriodoHasta?.slice(0, 10)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Monto</th>
+                    <td colSpan={3}>₡{parseFloat(aguinaldoSeleccionado.Monto || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                  {aguinaldoSeleccionado.Observaciones ? (
+                    <tr>
+                      <th>Observaciones</th>
+                      <td colSpan={3}>{aguinaldoSeleccionado.Observaciones}</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+
+              {/* Firmas */}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 36 }}>
+                <div style={{ width: "45%", textAlign: "center" }}>
+                  <div style={{ borderTop: "1px solid #333", paddingTop: 6 }}>Recibido por</div>
+                </div>
+                <div style={{ width: "45%", textAlign: "center" }}>
+                  <div style={{ borderTop: "1px solid #333", paddingTop: 6 }}>Autorizado por</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Acciones */}
+            <div className="d-flex justify-content-between mt-3">
+              <button className="btn btn-outline-primary" onClick={imprimirAguinaldoPagadoPDF}>Imprimir PDF</button>
+              <button className="btn btn-secondary" onClick={() => setShowDetalleAguinaldo(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGenerarAguinaldo && (
+        <div className="modal-overlay" onClick={() => setShowGenerarAguinaldo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Generar Pago de Aguinaldo</h4>
+            <div className="row g-3">
+              <div className="col-md-6">
+                <label className="form-label">Cédula</label>
+                <input className="form-control" value={formPagoAguinaldo.CedulaID} readOnly />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Nombre</label>
+                <input className="form-control" value={formPagoAguinaldo.Nombre} readOnly />
+              </div>
+
+              <div className="col-md-6">
+                <label className="form-label">Empresa</label>
+                <input className="form-control" value={formPagoAguinaldo.Empresa} readOnly />
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Desde</label>
+                <input className="form-control" value={formPagoAguinaldo.PeriodoDesde} readOnly />
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Hasta</label>
+                <input className="form-control" value={formPagoAguinaldo.PeriodoHasta} readOnly />
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label">Monto (₡)</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  value={formPagoAguinaldo.Monto}
+                  onChange={(e) => setFormPagoAguinaldo({ ...formPagoAguinaldo, Monto: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Fecha de Pago</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={formPagoAguinaldo.FechaPago}
+                  onChange={(e) => setFormPagoAguinaldo({ ...formPagoAguinaldo, FechaPago: e.target.value })}
+                />
+              </div>
+              <div className="col-md-12">
+                <label className="form-label">Observaciones</label>
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  value={formPagoAguinaldo.Observaciones}
+                  onChange={(e) => setFormPagoAguinaldo({ ...formPagoAguinaldo, Observaciones: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowGenerarAguinaldo(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarPagoAguinaldo}>Guardar</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -3742,7 +4955,7 @@ export const Dashboard = () => {
                             setShowVerFinanciamientos(false);
                           }}
                         >
-                          Editar
+                          Edit
                         </button>
                         <button
                           className="btn btn-sm btn-danger button-lista-financimientos"
@@ -3759,7 +4972,7 @@ export const Dashboard = () => {
                             }
                           }}
                         >
-                          Eliminar
+                          Elim
                         </button>
                         <button
                           className="btn btn-sm btn-primary button-lista-financimientos"
@@ -3769,13 +4982,19 @@ export const Dashboard = () => {
                             setShowAplicarPagoModal(true);    // 👈 ABRE el modal de aplicar pago
                           }}
                         >
-                          Aplicar
+                          Apli
                         </button>
                         <button
                           className="btn btn-sm btn-success me-1 button-lista-financimientos"
                           onClick={() => verAbonos(f.ID)}
                         >
-                          Abonos
+                          Abon
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-dark me-1 button-lista-financimientos"
+                          onClick={() => generarPDFFinanciamiento(f)}
+                        >
+                          PDF
                         </button>
                       </td>
                     </tr>
@@ -3878,12 +5097,7 @@ export const Dashboard = () => {
                 </button>
               </div>
             </div>
-
-
-
-
           </div>
-
         </div>
       )}
 
@@ -3918,6 +5132,57 @@ export const Dashboard = () => {
               }}>
                 Sí, eliminar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmEliminarCol && (
+        <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">Confirmar eliminación</h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => !eliminandoCol && setShowConfirmEliminarCol(false)}
+                />
+              </div>
+              <div className="modal-body">
+                <p className="mb-2">
+                  Vas a eliminar al colaborador:
+                </p>
+                <div className="p-3 border rounded bg-light">
+                  <div><strong>Nombre:</strong> {colaboradorAEliminar?.Nombre} {colaboradorAEliminar?.Apellidos}</div>
+                  <div><strong>Cédula:</strong> {colaboradorAEliminar?.CedulaID}</div>
+                  {colaboradorAEliminar?.Correo && (
+                    <div><strong>Correo:</strong> {colaboradorAEliminar.Correo}</div>
+                  )}
+                  {colaboradorAEliminar?.Telefono && (
+                    <div><strong>Teléfono:</strong> {colaboradorAEliminar.Telefono}</div>
+                  )}
+                </div>
+                <p className="mt-3 text-danger fw-semibold mb-0">
+                  Esta acción no se puede deshacer.
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => !eliminandoCol && setShowConfirmEliminarCol(false)}
+                  disabled={eliminandoCol}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => handleDeleteColaborador(colaboradorAEliminar?.ID)}
+                  disabled={eliminandoCol}
+                >
+                  {eliminandoCol ? "Eliminando..." : "Eliminar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4235,11 +5500,15 @@ export const Dashboard = () => {
 
       {showReporteColillas && (
         <div className="modal-overlay" onClick={() => setShowReporteTabla(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: '90vh', overflowY: 'auto' }}
+          >
             <h3>Reporte de Pagos - Planilla</h3>
 
-            {/* Filtro de fechas */}
-            <div className="mb-3 d-flex flex-wrap gap-3 align-items-center">
+            {/* Filtro de fechas (no imprime) */}
+            <div className="mb-3 d-flex flex-wrap gap-3 align-items-center no-print">
               <div>
                 <label>Desde:</label>
                 <input
@@ -4260,26 +5529,22 @@ export const Dashboard = () => {
               </div>
               <div className="mt-4 d-flex gap-2">
                 <button className="btn btn-primary" onClick={generarReportePagos}>Generar</button>
-                <button className="btn btn-outline-primary" onClick={() => window.print()}>Imprimir</button>
+                {/* 👇 ahora imprime SOLO las colillas */}
+                <button className="btn btn-outline-primary" onClick={imprimirSoloColillas}>Imprimir</button>
                 <button className="btn btn-outline-danger" onClick={descargarPDFColillas}>Descargar PDF</button>
               </div>
-
-
-
             </div>
 
-            {/* Resultados */}
-
-            <div className="reporte-colillas mt-4" id="contenido-colillas">
+            {/* Resultados: SOLO esto se imprime */}
+            <div className="reporte-colillas mt-4" id="contenido-colillas" ref={colillasRef}>
               {pagosFiltrados.length > 0 ? (
                 pagosFiltrados.map((pago, i) => (
-                  <table key={i} className="table table-bordered table-striped mb-4">
+                  <table key={i} className="table table-bordered table-striped mb-4 colilla">
                     <thead className="table-dark">
                       <tr>
                         <th>Nombre</th>
                         <th>Cédula</th>
                         <th>Fecha</th>
-
                         <th>Horas Trabaj</th>
                         <th>Horas Extra</th>
                         <th>Comisiones</th>
@@ -4297,7 +5562,6 @@ export const Dashboard = () => {
                         <td>{pago.Nombre}</td>
                         <td>{pago.CedulaID}</td>
                         <td>{pago.FechaRegistro?.slice(0, 10)}</td>
-
                         <td>{pago.HorasTrabajadas}</td>
                         <td>{pago.HorasExtra}</td>
                         <td>₡{pago.Comisiones.toLocaleString()}</td>
@@ -4316,7 +5580,9 @@ export const Dashboard = () => {
                 <p className="text-center text-muted">No se encontraron pagos en el rango indicado.</p>
               )}
             </div>
-            <div className="text-end mt-3">
+
+            {/* Botón cerrar (no imprime) */}
+            <div className="text-end mt-3 no-print">
               <button className="btn btn-secondary" onClick={() => setShowReporteColillas(false)}>Cerrar</button>
             </div>
           </div>
@@ -4384,6 +5650,165 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showListaAguinaldos && (
+        <div className="modal-overlay" onClick={() => setShowListaAguinaldos(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Colaboradores — Aguinaldo</h4>
+
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar por nombre o cédula..."
+                style={{ maxWidth: 340 }}
+                value={searchColabAguinaldo}
+                onChange={(e) => {
+                  setSearchColabAguinaldo(e.target.value);
+                  setPagColabPage(1);
+                }}
+              />
+              <span className="text-muted">Total: {filteredColabsAg.length}</span>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table table-bordered table-hover table-striped mt-2">
+                <thead className="table-dark">
+                  <tr>
+                    <th>#</th>
+                    <th>Nombre</th>
+                    <th>Cédula</th>
+                    <th>Empresa</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageSlice.length > 0 ? (
+                    pageSlice.map((c, i) => (
+                      <tr key={c.CedulaID || i}>
+                        <td>{pageStart + i + 1}</td>
+                        <td>{c.Nombre} {c.Apellidos}</td>
+                        <td>{c.CedulaID}</td>
+                        <td>{c.Empresa || c.Localidad || "—"}</td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => {
+                              // Abre el modal de pagos del colaborador y cierra éste para evitar overlays
+                              verPagosAguinaldoDe(c);
+                              setShowListaAguinaldos(false);
+                            }}
+                          >
+                            Ver pagos Aguinaldo
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="text-center text-muted">No hay colaboradores.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="d-flex justify-content-between align-items-center mt-2">
+              <button
+                className="btn btn-outline-primary btn-sm"
+                disabled={pagColabPage === 1}
+                onClick={() => setPagColabPage(pagColabPage - 1)}
+              >
+                &lt; Anterior
+              </button>
+              <span>Página {pagColabPage} de {totalPagesAg}</span>
+              <button
+                className="btn btn-outline-primary btn-sm"
+                disabled={pagColabPage === totalPagesAg}
+                onClick={() => setPagColabPage(pagColabPage + 1)}
+              >
+                Siguiente &gt;
+              </button>
+            </div>
+
+            <div className="text-end mt-3">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowListaAguinaldos(false);
+                  // Limpieza opcional
+                  // setColaboradorAguinaldo(null);
+                  // setPagosAguinaldo([]);
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {showPagosDeColab && (
+        <div className="modal-overlay" onClick={() => setShowPagosDeColab(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div id="imp-agui-colab" style={{ padding: 10 }}>
+              <h4 className="text-center mb-2">
+                Aguinaldos — {colabSeleccionadoAguinaldo?.Nombre} {colabSeleccionadoAguinaldo?.Apellidos}
+              </h4>
+              <p className="text-center text-muted mb-3">
+                Localidad: <strong>{localStorage.getItem("localidad")}</strong>
+              </p>
+
+              <div className="table-responsive">
+                <table className="table table-bordered table-striped">
+                  <thead className="table-dark">
+                    <tr>
+                      <th>Período</th>
+                      <th>Monto Aguinaldo</th>
+                      <th>Fecha de Registro</th>
+                      <th className="no-print">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagosAguinaldo.length > 0 ? pagosAguinaldo.map((p, i) => {
+                      const desde = p.PeriodoDesde?.slice(0, 10) || p.Desde?.slice(0, 10) || "";
+                      const hasta = p.PeriodoHasta?.slice(0, 10) || p.Hasta?.slice(0, 10) || "";
+                      const fecha = (p.FechaCreacion || p.FechaPago || p.Fecha || "").slice(0, 10);
+                      return (
+                        <tr key={p.ID || i}>
+                          <td>{desde} — {hasta}</td>
+                          <td>{fmtCRC(p.TotalAguinaldo || p.Monto || p.Total || 0)}</td>
+                          <td>{fecha}</td>
+                          <td className="no-print">
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => eliminarPagoAguinaldo(p.ID)}
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr><td colSpan="4" className="text-center text-muted">Sin pagos de aguinaldo</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="d-flex justify-content-between mt-3">
+              <button className="btn btn-outline-primary" onClick={imprimirPagosAguinaldoDe}>
+                Imprimir PDF
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowPagosDeColab(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {showConfirmarEliminar && (
         <div className="modal-overlay" onClick={() => setShowConfirmarEliminar(false)}>
@@ -4433,6 +5858,35 @@ export const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {showConfirmEliminarAguinaldo && (
+        <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">Confirmar eliminación</h5>
+                <button type="button" className="btn-close" onClick={() => setShowConfirmEliminarAguinaldo(false)}></button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  Vas a eliminar el pago de aguinaldo de <strong>{aguinaldoAEliminar?.Nombre}</strong> por{" "}
+                  <strong>₡{Number(aguinaldoAEliminar?.Monto || 0).toLocaleString("es-CR")}</strong>.
+                </p>
+                <p className="text-danger mb-0">Esta acción no se puede deshacer.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setShowConfirmEliminarAguinaldo(false)}>
+                  Cancelar
+                </button>
+                <button className="btn btn-danger" onClick={eliminarAguinaldoPagadoConfirmado}>
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Modal "Próximamente" */}
 

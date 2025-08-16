@@ -890,3 +890,18 @@ body.sidebar-closed .content_section {
 .button-ver-pagos-historial {
   margin-left: 6px;
 }
+
+.iconos-listas-financiamientos {
+  width: 30px;
+  height: 30px;
+  margin: 0 !important;
+  padding: 0;
+}
+
+.iconos-listas-financiamientos:hover {
+  color: #000000 !important;
+}
+
+@media print {
+  .no-print { display: none !important; }
+}

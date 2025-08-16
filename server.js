@@ -2100,7 +2100,7 @@ app.post('/api/vales/aplicar-abono', async (req, res) => {
 
   } catch (err) {
     console.error("❌ Error al aplicar abono a vale:", err);
-    try { await transaction.rollback(); } catch {}
+    try { await transaction.rollback(); } catch { }
     return res.status(500).json({ message: "Error al aplicar abono" });
   }
 });
@@ -2293,5 +2293,214 @@ app.put("/api/financiamientos/:id/monto-pendiente", async (req, res) => {
   } catch (e) {
     console.error("❌ Error en /api/financiamientos/:id/monto-pendiente:", e);
     res.status(500).json({ error: "Error interno" });
+  }
+});
+
+
+// Verificar si ya existe pago de aguinaldo para ese período
+app.get('/api/aguinaldos-pagados/existe', async (req, res) => {
+  const { cedulaID, empresa, desde, hasta } = req.query;
+  try {
+    const pool = await sql.connect(dbConfig);
+    const r = await pool.request()
+      .input('CedulaID', sql.NVarChar, cedulaID)
+      .input('Empresa', sql.NVarChar, empresa)
+      .input('Desde', sql.Date, desde)
+      .input('Hasta', sql.Date, hasta)
+      .query(`
+        SELECT COUNT(1) AS cnt
+        FROM AguinaldosPagados
+        WHERE CedulaID = @CedulaID
+          AND Empresa = @Empresa
+          AND PeriodoDesde = @Desde
+          AND PeriodoHasta = @Hasta
+      `);
+
+    res.json({ existe: r.recordset[0].cnt > 0 });
+  } catch (err) {
+    console.error('Error verificando aguinaldo existente:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+});
+
+// Crear pago de aguinaldo
+app.post('/api/aguinaldos-pagados', async (req, res) => {
+  const {
+    CedulaID, Nombre, Empresa,
+    PeriodoDesde, PeriodoHasta,
+    Monto, FechaPago, Observaciones
+  } = req.body;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // Duplicado
+    const dup = await pool.request()
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Empresa', sql.NVarChar, Empresa)
+      .input('Desde', sql.Date, PeriodoDesde)
+      .input('Hasta', sql.Date, PeriodoHasta)
+      .query(`
+        SELECT COUNT(1) AS cnt
+        FROM AguinaldosPagados
+        WHERE CedulaID = @CedulaID
+          AND Empresa = @Empresa
+          AND PeriodoDesde = @Desde
+          AND PeriodoHasta = @Hasta
+      `);
+
+    if (dup.recordset[0].cnt > 0) {
+      return res.status(409).json({ message: 'Ya existe un pago de aguinaldo para ese período.' });
+    }
+
+    await pool.request()
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('Empresa', sql.NVarChar, Empresa)
+      .input('Desde', sql.Date, PeriodoDesde)
+      .input('Hasta', sql.Date, PeriodoHasta)
+      .input('Monto', sql.Decimal(18, 2), Monto)
+      .input('FechaPago', sql.Date, FechaPago)
+      .input('Observaciones', sql.NVarChar(sql.MAX), Observaciones || null)
+      .query(`
+        INSERT INTO AguinaldosPagados
+          (CedulaID, Nombre, Empresa, PeriodoDesde, PeriodoHasta, Monto, FechaPago, Observaciones)
+        VALUES
+          (@CedulaID, @Nombre, @Empresa, @Desde, @Hasta, @Monto, @FechaPago, @Observaciones)
+      `);
+
+    res.status(201).json({ message: 'Pago de aguinaldo guardado correctamente' });
+  } catch (err) {
+    console.error('Error creando pago de aguinaldo:', err);
+    res.status(500).json({ message: 'Error del servidor al guardar el pago' });
+  }
+});
+
+
+// LISTAR pagos de aguinaldo por empresa/localidad
+app.get('/api/aguinaldos-pagados', async (req, res) => {
+  const { localidad } = req.query;
+  try {
+    const pool = await sql.connect(dbConfig);
+    const r = await pool.request()
+      .input('Empresa', sql.NVarChar, localidad || '')
+      .query(`
+        SELECT ID, CedulaID, Nombre, Empresa,
+               CONVERT(varchar(10), PeriodoDesde, 120) AS PeriodoDesde,
+               CONVERT(varchar(10), PeriodoHasta, 120) AS PeriodoHasta,
+               Monto, CONVERT(varchar(10), FechaPago, 120) AS FechaPago,
+               Observaciones
+        FROM AguinaldosPagados
+        WHERE Empresa = @Empresa
+        ORDER BY FechaPago DESC, ID DESC
+      `);
+    res.json(r.recordset);
+  } catch (err) {
+    console.error('Error listando AguinaldosPagados:', err);
+    res.status(500).json({ message: 'Error en servidor' });
+  }
+});
+
+// ELIMINAR un pago de aguinaldo
+app.delete('/api/aguinaldos-pagados/:id', async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, parseInt(req.params.id, 10))
+      .query(`DELETE FROM AguinaldosPagados WHERE ID = @ID`);
+    res.json({ message: 'Eliminado correctamente' });
+  } catch (err) {
+    console.error('Error eliminando AguinaldosPagados:', err);
+    res.status(500).json({ message: 'Error al eliminar' });
+  }
+});
+
+app.get('/api/aguinaldo/pagos', async (req, res) => {
+  try {
+    // Acepta varios alias para evitar problemas de nombre
+    const cedulaID = req.query.cedulaID || req.query.cedula || req.query.CedulaID;
+    const empresa = req.query.localidad || req.query.empresa || req.query.Empresa;
+
+    if (!cedulaID || !empresa) {
+      return res.status(400).json({ message: "Faltan parámetros: cedulaID y localidad/empresa" });
+    }
+
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('CedulaID', sql.VarChar, cedulaID)
+      .input('Empresa', sql.VarChar, empresa)
+      .query(`
+        SELECT 
+          ID,
+          CedulaID,
+          Nombre,
+          Empresa,
+          PeriodoDesde,
+          PeriodoHasta,
+          Monto,
+          FechaPago,
+          Observaciones
+        FROM Aguinaldos
+        WHERE CedulaID = @CedulaID
+          AND Empresa  = @Empresa
+        ORDER BY 
+          FechaPago DESC, 
+          ID DESC
+      `);
+
+    return res.json(result.recordset || []);
+  } catch (err) {
+    console.error("Error listando pagos de aguinaldo:", err);
+    return res.status(500).json({ message: "Error del servidor al listar pagos de aguinaldo" });
+  }
+});
+
+// =============================
+// ELIMINAR un pago de aguinaldo
+// =============================
+app.delete('/api/aguinaldo/pagos/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ message: "ID inválido" });
+
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .query(`
+        DELETE FROM Aguinaldos
+        WHERE ID = @ID
+      `);
+
+    return res.json({ message: "Pago de aguinaldo eliminado correctamente" });
+  } catch (err) {
+    console.error("Error eliminando pago de aguinaldo:", err);
+    return res.status(500).json({ message: "Error del servidor al eliminar pago" });
+  }
+});
+
+// Lista pagos de aguinaldo guardados
+app.get('/api/aguinaldo/pagos', async (req, res) => {
+  const { cedulaID, localidad } = req.query;
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('CedulaID', sql.VarChar, cedulaID)
+      .input('Empresa', sql.VarChar, localidad || '')
+      .query(`
+        SELECT ID, CedulaID, Nombre, Empresa,
+               CONVERT(varchar(10), PeriodoDesde, 23) AS PeriodoDesde,
+               CONVERT(varchar(10), PeriodoHasta, 23) AS PeriodoHasta,
+               Monto,
+               CONVERT(varchar(10), FechaPago, 23) AS FechaPago,
+               Observaciones
+        FROM Aguinaldos
+        WHERE CedulaID = @CedulaID AND Empresa = @Empresa
+        ORDER BY FechaPago DESC
+      `);
+
+    res.json(result.recordset); // ← devuelve un array simple
+  } catch (err) {
+    console.error('Error listando pagos de aguinaldo:', err);
+    res.status(500).json({ message: 'Error en servidor' });
   }
 });
