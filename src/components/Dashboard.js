@@ -13,6 +13,7 @@ import { generarPDFVale } from "./ContenedorImpresionVale";
 import ContratoColaborador from './ContratoColaborador';
 import GestionContratos from "./GestionCotratos";
 
+
 export const Dashboard = () => {
   const [activeCard, setActiveCard] = useState(null);
   const [colaboradores, setColaboradores] = useState([]);
@@ -137,6 +138,12 @@ export const Dashboard = () => {
   const [showDetalleAguinaldo, setShowDetalleAguinaldo] = useState(false);
   const [aguinaldoSeleccionado, setAguinaldoSeleccionado] = useState(null);
 
+  // VER AUMENTOS
+  const [showModalVerAumentos, setShowModalVerAumentos] = useState(false);
+  const [aumentos, setAumentos] = useState([]);           // historial desde BD
+  const [searchAumentos, setSearchAumentos] = useState("");
+  const [pagAumPage, setPagAumPage] = useState(1);
+  const AUM_PER_PAGE = 10;
 
 
   // Pagos de un colaborador
@@ -722,8 +729,6 @@ export const Dashboard = () => {
     setShowModalVerPagosAguinaldo(true);
   };
 
-
-
   const generarPDFFinanciamiento = async (fin) => {
     // ——— Helpers ———
     const formatMonto = (n) => Number(n || 0).toLocaleString('en-US');
@@ -1037,6 +1042,302 @@ export const Dashboard = () => {
 
     return matchesLoc && matchesSearch;
   });
+
+  // Abrir modal de Aumentos (carga colaboradores por localidad)
+  const abrirModalAumentos = async () => {
+    try {
+      const localidad = getLocalidad();
+      const res = await fetch(`http://localhost:3001/api/colaboradores?localidad=${encodeURIComponent(localidad)}`);
+      const data = await res.json();
+      setListaColaboradoresAumento(Array.isArray(data) ? data : []);
+      setBusquedaAumentos("");
+      setPaginaAumentos(1);
+      setShowAumentosModal(true);
+    } catch (err) {
+      console.error("Error al cargar colaboradores para aumentos:", err);
+    }
+  };
+
+  // 👇 Helper pequeño para convertir lo que devuelva el backend en un array
+  const normalizeAumentosResponse = (payload) => {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.recordset)) return payload.recordset;
+    if (Array.isArray(payload.rows)) return payload.rows;
+    if (Array.isArray(payload.data)) return payload.data;
+    if (payload.results && Array.isArray(payload.results)) return payload.results;
+    return [];
+  };
+
+  // ✅ Usa tu helper de localidad si ya lo tienes (resolveLocalidad / getLocalidadNombre).
+  // Si no, este fallback interno te saca del apuro sin duplicarte funciones:
+  const _resolveLocalidadSafe = () => {
+    let loc = localStorage.getItem("localidad") || "";
+    try { const o = JSON.parse(loc); loc = o?.Localidad || o?.Empresa || loc; } catch { }
+    if (!loc) {
+      try {
+        const u = JSON.parse(localStorage.getItem("usuario") || "null");
+        loc = u?.Localidad || "";
+      } catch { }
+    }
+    return loc || "";
+  };
+
+  // 🔄 Reemplaza SOLO tu abrirModalVerAumentos actual por este:
+  const abrirModalVerAumentos = async () => {
+    const loc = (typeof resolveLocalidad === "function" ? resolveLocalidad() : _resolveLocalidadSafe());
+    const base = "http://localhost:3001/api/aumentos-salariales";
+
+    const tryFetch = async (url) => {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const json = await r.json();
+        const arr = normalizeAumentosResponse(json);
+        // Filtrado por empresa/localidad si el backend no filtra por query:
+        if (loc) {
+          return arr.filter(a => {
+            const emp = a.Empresa || a.Localidad || a.empresa || a.localidad || "";
+            return !emp || emp.toString().toLowerCase() === loc.toString().toLowerCase();
+          });
+        }
+        return arr;
+      } catch (e) {
+        console.warn("Aumentos -> fallo fetch:", url, e);
+        return null;
+      }
+    };
+
+
+    // Intento 1: ?localidad=
+    let arr = await tryFetch(`${base}?localidad=${encodeURIComponent(loc)}`);
+    // Intento 2: ?empresa= (por si tu backend usa ese nombre)
+    if (!arr || arr.length === 0) {
+      arr = await tryFetch(`${base}?empresa=${encodeURIComponent(loc)}`);
+    }
+    // Intento 3: sin filtro (y filtramos en cliente)
+    if (!arr || arr.length === 0) {
+      arr = await tryFetch(base);
+    }
+
+    // Asegura array
+    arr = Array.isArray(arr) ? arr : [];
+
+    // Ordena descendente por fecha (toma 'Fecha' o variantes)
+    arr.sort((a, b) => {
+      const fa = new Date(a.Fecha || a.fecha || a.FechaRegistro || 0);
+      const fb = new Date(b.Fecha || b.fecha || b.FechaRegistro || 0);
+      return fb - fa;
+    });
+
+    // Debug opcional (puedes quitarlo cuando verifiques que carga bien)
+    console.log("🔎 aumentos cargados:", arr);
+
+    setAumentos(arr);
+    setPagAumPage(1);
+    setSearchAumentos("");
+    setShowModalVerAumentos(true);
+  };
+
+
+  // Abrir sub-modal para crear aumento de un colaborador
+  const abrirCrearAumento = (col) => {
+    setColabSeleccionadoAumento(col);
+    setAumentoForm({
+      Fecha: new Date().toISOString().slice(0, 10),
+      SalarioActual: Number(col.SalarioBase || 0),
+      SalarioNuevo: Number(col.SalarioBase || 0),
+      Observaciones: ""
+    });
+    setShowCrearAumentoModal(true);
+  };
+
+  // Helper: obtiene el nombre de la localidad (Empresa) de forma robusta
+  const getLocalidadNombre = () => {
+    let loc = localStorage.getItem("localidad") || "";
+    try {
+      const o = JSON.parse(loc);
+      loc = o?.Localidad || o?.Empresa || loc;
+    } catch { }
+    return loc || "—";
+  };
+
+  // Fallback por si no hay logo en la API
+  const getLogoFallback = () => {
+    return localStorage.getItem("logoEmpresaPNG") || "/images/logo-empresa.png";
+  };
+
+  // Helper: intenta obtener el logo base64 PNG guardado en localStorage
+  // Guarda tu logo en localStorage.setItem("logoEmpresaPNG", "data:image/png;base64,....")
+  const getLogoEmpresa = () => {
+    const posible = localStorage.getItem("logoEmpresaPNG");
+    // Fallback a una ruta estática si no hay base64 guardado:
+    return posible || "/images/logo-empresa.png";
+  };
+
+  // ⚠️ Usa números sin símbolo para evitar el carácter extraño del colón en algunos PDF
+  const formatMonto = (n) => Number(n || 0).toLocaleString("es-CR", { minimumFractionDigits: 2 });
+
+  // Genera el PDF del aumento salarial
+  const imprimirAumentoPDF = async (aumento) => {
+    // aumento: { CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha, Observaciones }
+    const loc = getLocalidadNombre();
+
+    let header = null;
+    try {
+      const r = await fetch(`http://localhost:3001/api/localidades/${encodeURIComponent(loc)}`);
+      header = await r.json(); // se espera { Empresa, RazonSocial, NumeroCedula, Correo, Telefono, Direccion, Logo? }
+    } catch (e) {
+      console.warn("No se pudo cargar encabezado empresa:", e);
+    }
+
+    const logo = (header && (header.Logo || header.LogoBase64)) || getLogoFallback();
+    const empresaNombre = header?.Empresa || aumento.Empresa || loc || "—";
+
+    const sAnt = Number(aumento.SalarioAnterior || 0);
+    const sNvo = Number(aumento.SalarioNuevo || 0);
+    const porc = sAnt > 0 ? ((sNvo - sAnt) / sAnt) * 100 : 0;
+
+    // contenedor oculto
+    const wrap = document.createElement("div");
+    wrap.style.position = "fixed";
+    wrap.style.left = "-9999px";
+    wrap.style.top = "0";
+    wrap.id = "print-aumento-wrap";
+
+    wrap.innerHTML = `
+  <div id="print-aumento" style="font-family: Arial, sans-serif; color:#000;">
+    <style>
+      @page { size: A4 portrait; margin: 15mm; }
+      .encabezado { text-align: center; margin-bottom: 12px; }
+      .encabezado .logo { height: 70px; margin-bottom: 6px; object-fit: contain; }
+      .titulo { font-size: 18px; font-weight: 700; margin: 6px 0 2px; }
+      .empresa { font-size: 13px; color:#333; margin-bottom: 6px; }
+      .datos-empresa { font-size: 11px; color:#333; line-height: 1.3; }
+      .hr { border: 0; border-top: 1px solid #555; margin: 10px 0 12px; }
+      .tabla { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .tabla th, .tabla td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
+      .bloque { width: 720px; margin: 0 auto; }
+      .firmas { margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      .firma { text-align: center; }
+      .firma .linea { border-top: 1px solid #000; margin-top: 40px; }
+      .small { font-size: 11px; color: #444; }
+      .obs { white-space: pre-line; }
+    </style>
+
+    <div class="bloque">
+      <div class="encabezado">
+        <img class="logo" src="${logo}" alt="Logo" />
+        <div class="titulo">COMPROBANTE DE AUMENTO SALARIAL</div>
+        <div class="empresa">${empresaNombre}</div>
+        <div class="datos-empresa">
+          ${header?.RazonSocial ? `<div>${header.RazonSocial}</div>` : ""}
+          ${header?.NumeroCedula ? `<div>N° Cédula: ${header.NumeroCedula}</div>` : ""}
+          ${header?.Correo ? `<div>Correo: ${header.Correo}</div>` : ""}
+          ${header?.Telefono ? `<div>Teléfono: ${header.Telefono}</div>` : ""}
+          ${header?.Direccion ? `<div>${header.Direccion}</div>` : ""}
+        </div>
+      </div>
+
+      <hr class="hr"/>
+
+      <table class="tabla">
+        <tbody>
+          <tr><th style="width: 28%;">Colaborador</th><td>${aumento.Nombre || "—"}</td></tr>
+          <tr><th>Cédula</th><td>${aumento.CedulaID || "—"}</td></tr>
+          <tr><th>Salario anterior (mensual)</th><td>${formatMonto(sAnt)}</td></tr>
+          <tr><th>Salario nuevo (mensual)</th><td>${formatMonto(sNvo)}</td></tr>
+          <tr><th>Variación</th><td>${formatMonto(sNvo - sAnt)} (${porc.toFixed(2)}%)</td></tr>
+          <tr><th>Fecha</th><td>${(aumento.Fecha || "").toString().slice(0, 10)}</td></tr>
+          <tr><th>Observaciones</th><td class="obs">${aumento.Observaciones || "—"}</td></tr>
+        </tbody>
+      </table>
+
+      <div class="firmas">
+        <div class="firma">
+          <div class="linea"></div>
+          <div>Firma del Colaborador</div>
+          <div class="small">${aumento.Nombre || "—"}</div>
+        </div>
+        <div class="firma">
+          <div class="linea"></div>
+          <div>Firma del Encargado</div>
+          <div class="small">${empresaNombre}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+    document.body.appendChild(wrap);
+
+    const elemento = document.getElementById("print-aumento");
+    const opciones = {
+      margin: 10,
+      filename: `Aumento_${(aumento.Nombre || "colaborador").replace(/\s+/g, "_")}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    };
+
+    await html2pdf().set(opciones).from(elemento).save().catch(() => { });
+    document.body.removeChild(wrap);
+  };
+
+
+  // Guardar aumento: 1) actualiza salario base en Colaboradores  2) registra el aumento en otra tabla
+  const guardarAumento = async () => {
+    try {
+      if (!colabSeleccionadoAumento) return alert("No hay colaborador seleccionado.");
+      if (!aumentoForm.SalarioNuevo || aumentoForm.SalarioNuevo <= 0) return alert("Ingrese un salario nuevo válido.");
+
+      const localidad = getLocalidad();
+
+      // 1) Actualizar salario base
+      const resUpdate = await fetch(`http://localhost:3001/api/colaboradores/${colabSeleccionadoAumento.ID}/salario`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ SalarioBase: aumentoForm.SalarioNuevo })
+      });
+      if (!resUpdate.ok) {
+        const t = await resUpdate.text();
+        throw new Error("No se pudo actualizar el salario base: " + t);
+      }
+
+      // 2) Registrar el aumento en AumentosSalariales
+      const resInsert = await fetch("http://localhost:3001/api/aumentos-salariales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // 👇 añade el ID del colaborador (por si tu tabla no acepta NULL)
+          ColaboradorID: colabSeleccionadoAumento.ID,
+          CedulaID: colabSeleccionadoAumento.CedulaID,
+          Nombre: `${colabSeleccionadoAumento.Nombre} ${colabSeleccionadoAumento.Apellidos || ""}`.trim(),
+          Empresa: localidad,
+          SalarioAnterior: Number(aumentoForm.SalarioActual || 0),
+          SalarioNuevo: Number(aumentoForm.SalarioNuevo || 0),
+          Fecha: aumentoForm.Fecha, // YYYY-MM-DD
+          Observaciones: aumentoForm.Observaciones || ""
+        })
+      });
+      if (!resInsert.ok) {
+        const t = await resInsert.text();
+        throw new Error("No se pudo registrar el aumento salarial: " + t);
+      }
+
+      // refrescar en UI
+      setListaColaboradoresAumento(prev => prev.map(c =>
+        c.ID === colabSeleccionadoAumento.ID ? { ...c, SalarioBase: aumentoForm.SalarioNuevo } : c
+      ));
+
+      setShowCrearAumentoModal(false);
+      setColabSeleccionadoAumento(null);
+      alert("Aumento guardado correctamente.");
+    } catch (err) {
+      console.error("Error guardando aumento:", err);
+      alert("Ocurrió un error al guardar el aumento.");
+    }
+  };
+
 
 
   const fmtCRC = (n) => `₡${(Number(n) || 0).toLocaleString('es-CR')}`;
@@ -1367,6 +1668,8 @@ export const Dashboard = () => {
     }
   };
 
+
+
   const obtenerTodasBoletas = async () => {
     try {
       const localidad = localStorage.getItem("localidad") || "";
@@ -1517,6 +1820,7 @@ export const Dashboard = () => {
     { id: "vales", title: "VALES", img: "/images/mano-con-dolar.png" },
     { id: "aguinaldo", title: "AGUINALDO", img: "/images/aguinaldo.png" },
     { id: "contratos", title: "CONTRATO", img: "/images/contrato.png" },
+    { id: "aumentos", title: "AUMENTOS", img: "/images/salario.png" }
     // { id: "disponible3", title: "DISPONIBLE", img: "/images/disponible.png" }
   ];
 
@@ -2604,6 +2908,22 @@ export const Dashboard = () => {
     }
   };
 
+  // ---- AUMENTOS (nuevos estados) ----
+  const [showAumentosModal, setShowAumentosModal] = useState(false);
+  const [listaColaboradoresAumento, setListaColaboradoresAumento] = useState([]);
+  const [busquedaAumentos, setBusquedaAumentos] = useState("");
+  const [paginaAumentos, setPaginaAumentos] = useState(1);
+  const rowsPorPaginaAumentos = 10;
+
+  const [showCrearAumentoModal, setShowCrearAumentoModal] = useState(false);
+  const [colabSeleccionadoAumento, setColabSeleccionadoAumento] = useState(null);
+  const [aumentoForm, setAumentoForm] = useState({
+    Fecha: new Date().toISOString().slice(0, 10),
+    SalarioActual: 0,
+    SalarioNuevo: 0,
+    Observaciones: ""
+  });
+
 
 
   const botonImprimir = (boleta) => (
@@ -2634,6 +2954,9 @@ export const Dashboard = () => {
       console.error("Error al cargar pagos:", error);
     }
   };
+
+
+
 
   const renderForm = () => {
     if (activeCard === "colaboradores" && viewMode) {
@@ -2876,6 +3199,8 @@ export const Dashboard = () => {
                   }
                   else if (card.id === "contratos") {
                     setShowContratoModal(true);
+                  } else if (card.id === "aumentos") {
+                    abrirModalAumentos();
                   }
                   else {
                     setActiveCard(card.id);
@@ -2905,6 +3230,9 @@ export const Dashboard = () => {
                   else if (card.id === "planilla") {
                     setShowReporteColillas(true); // ✅ Este es el mismo modal usado por "Ver colillas"
                     setActiveCard(card.id);
+                  }
+                  else if (card.id === "aumentos") {
+                    abrirModalVerAumentos();
                   }
                   else if (card.id === "vacaciones") {
                     obtenerTodasBoletas(); // 👈 esta función ya la tiene implementada
@@ -4442,6 +4770,113 @@ export const Dashboard = () => {
         </div>
       )}
 
+      {showModalVerAumentos && (
+        <div className="modal-overlay" onClick={() => setShowModalVerAumentos(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "980px" }}>
+            <h4>Aumentos Salariales</h4>
+
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar por nombre o cédula..."
+                style={{ maxWidth: 340 }}
+                value={searchAumentos}
+                onChange={(e) => { setSearchAumentos(e.target.value); setPagAumPage(1); }}
+              />
+              <span className="text-muted">Total: {
+                aumentos.filter(a =>
+                  (a.Nombre || "").toLowerCase().includes(searchAumentos.toLowerCase()) ||
+                  (a.CedulaID || "").toLowerCase().includes(searchAumentos.toLowerCase())
+                ).length
+              }</span>
+            </div>
+
+            {(() => {
+              const filtrados = aumentos.filter(a =>
+                (a.Nombre || "").toLowerCase().includes(searchAumentos.toLowerCase()) ||
+                (a.CedulaID || "").toLowerCase().includes(searchAumentos.toLowerCase())
+              );
+              const totalPages = Math.max(1, Math.ceil(filtrados.length / AUM_PER_PAGE));
+              const start = (pagAumPage - 1) * AUM_PER_PAGE;
+              const pageItems = filtrados.slice(start, start + AUM_PER_PAGE);
+
+              return (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-bordered table-hover table-striped">
+                      <thead className="table-dark">
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Cédula</th>
+                          <th>Fecha</th>
+                          <th>Salario Anterior</th>
+                          <th>Salario Nuevo</th>
+                          <th>Observaciones</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageItems.length > 0 ? pageItems.map((a) => (
+                          <tr key={a.ID}>
+                            <td>{a.Nombre}</td>
+                            <td>{a.CedulaID}</td>
+                            <td>{(a.Fecha || "").toString().slice(0, 10)}</td>
+                            <td>₡{formatMonto(a.SalarioAnterior)}</td>
+                            <td>₡{formatMonto(a.SalarioNuevo)}</td>
+                            <td>{a.Observaciones || "—"}</td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => imprimirAumentoPDF({
+                                  CedulaID: a.CedulaID,
+                                  Nombre: a.Nombre,
+                                  Empresa: a.Empresa,
+                                  SalarioAnterior: a.SalarioAnterior,
+                                  SalarioNuevo: a.SalarioNuevo,
+                                  Fecha: a.Fecha,
+                                  Observaciones: a.Observaciones
+                                })}
+                              >
+                                PDF
+                              </button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan="7" className="text-center text-muted">No hay aumentos registrados.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="d-flex justify-content-between align-items-center mt-2">
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      disabled={pagAumPage === 1}
+                      onClick={() => setPagAumPage(pagAumPage - 1)}
+                    >
+                      &lt; Anterior
+                    </button>
+                    <span>Página {pagAumPage} de {totalPages}</span>
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      disabled={pagAumPage === totalPages}
+                      onClick={() => setPagAumPage(pagAumPage + 1)}
+                    >
+                      Siguiente &gt;
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary" onClick={() => setShowModalVerAumentos(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeCard === "planilla" && !showCrearPago && (
         <div className="modal-overlay" onClick={() => setActiveCard(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -4794,6 +5229,170 @@ export const Dashboard = () => {
             <div className="d-flex justify-content-between mt-3">
               <button className="btn btn-outline-primary" onClick={imprimirAguinaldoPagadoPDF}>Imprimir PDF</button>
               <button className="btn btn-secondary" onClick={() => setShowDetalleAguinaldo(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAumentosModal && (
+        <div className="modal-overlay" onClick={() => setShowAumentosModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Aumentos Salariales</h3>
+
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar por nombre o cédula..."
+                style={{ maxWidth: 340 }}
+                value={busquedaAumentos}
+                onChange={(e) => { setBusquedaAumentos(e.target.value); setPaginaAumentos(1); }}
+              />
+              <span className="text-muted">
+                Localidad: {(() => { let l = localStorage.getItem("localidad") || ""; try { const o = JSON.parse(l); return o?.Localidad || o?.Empresa || l; } catch { return l; } })()}
+              </span>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table table-bordered table-hover table-striped">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Cédula</th>
+                    <th>Salario Base (mensual)</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const q = busquedaAumentos.trim().toLowerCase();
+                    const filtrados = listaColaboradoresAumento.filter(c =>
+                      (c.Nombre || "").toLowerCase().includes(q) ||
+                      (c.Apellidos || "").toLowerCase().includes(q) ||
+                      (c.CedulaID || "").toLowerCase().includes(q)
+                    );
+
+                    const total = filtrados.length;
+                    const ini = (paginaAumentos - 1) * rowsPorPaginaAumentos;
+                    const fin = ini + rowsPorPaginaAumentos;
+                    const pagina = filtrados.slice(ini, fin);
+
+                    return pagina.length > 0 ? pagina.map((c) => (
+                      <tr key={c.ID}>
+                        <td>{c.Nombre} {c.Apellidos}</td>
+                        <td>{c.CedulaID}</td>
+                        <td>₡{Number(c.SalarioBase || 0).toLocaleString("es-CR", { minimumFractionDigits: 2 })}</td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => abrirCrearAumento(c)}
+                          >
+                            Crear aumento
+                          </button>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan="4" className="text-center text-muted">No hay colaboradores.</td></tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Paginación */}
+            {(() => {
+              const q = busquedaAumentos.trim().toLowerCase();
+              const totalFiltrados = listaColaboradoresAumento.filter(c =>
+                (c.Nombre || "").toLowerCase().includes(q) ||
+                (c.Apellidos || "").toLowerCase().includes(q) ||
+                (c.CedulaID || "").toLowerCase().includes(q)
+              ).length;
+              const totalPags = Math.max(1, Math.ceil(totalFiltrados / rowsPorPaginaAumentos));
+
+              return (
+                <div className="d-flex justify-content-between align-items-center mt-2">
+                  <button
+                    className="btn btn-outline-primary btn-sm"
+                    disabled={paginaAumentos === 1}
+                    onClick={() => setPaginaAumentos(paginaAumentos - 1)}
+                  >
+                    &lt; Anterior
+                  </button>
+                  <span>Página {paginaAumentos} de {totalPags}</span>
+                  <button
+                    className="btn btn-outline-primary btn-sm"
+                    disabled={paginaAumentos === totalPags}
+                    onClick={() => setPaginaAumentos(paginaAumentos + 1)}
+                  >
+                    Siguiente &gt;
+                  </button>
+                </div>
+              );
+            })()}
+
+            <div className="text-end mt-3">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowAumentosModal(false);
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCrearAumentoModal && colabSeleccionadoAumento && (
+        <div className="modal-overlay" onClick={() => setShowCrearAumentoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h4>Crear aumento — {colabSeleccionadoAumento.Nombre} {colabSeleccionadoAumento.Apellidos}</h4>
+            <p className="text-muted mb-2">Cédula: {colabSeleccionadoAumento.CedulaID}</p>
+
+            <div className="row g-3">
+              <div className="col-md-4">
+                <label className="form-label">Fecha</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={aumentoForm.Fecha}
+                  onChange={(e) => setAumentoForm({ ...aumentoForm, Fecha: e.target.value })}
+                />
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Salario actual</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={`₡${Number(aumentoForm.SalarioActual || 0).toLocaleString("es-CR", { minimumFractionDigits: 2 })}`}
+                  readOnly
+                />
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Salario nuevo</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  min={0}
+                  value={aumentoForm.SalarioNuevo}
+                  onChange={(e) => setAumentoForm({ ...aumentoForm, SalarioNuevo: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="col-12">
+                <label className="form-label">Observaciones (opcional)</label>
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  value={aumentoForm.Observaciones}
+                  onChange={(e) => setAumentoForm({ ...aumentoForm, Observaciones: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="text-end mt-3">
+              <button className="btn btn-secondary me-2" onClick={() => setShowCrearAumentoModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarAumento}>Guardar Aumento</button>
             </div>
           </div>
         </div>

@@ -2504,3 +2504,220 @@ app.get('/api/aguinaldo/pagos', async (req, res) => {
     res.status(500).json({ message: 'Error en servidor' });
   }
 });
+
+// APLICAR aumento en 1 paso: actualiza salario + registra auditoría
+app.post('/api/aumentos-salariales/aplicar', async (req, res) => {
+  const {
+    ColaboradorID,
+    CedulaID,
+    Nombre,
+    Empresa,
+    SalarioAnterior,
+    SalarioNuevo,
+    Fecha,            // 'YYYY-MM-DD'
+    Observaciones = ""
+  } = req.body;
+
+  if (!ColaboradorID || !SalarioNuevo || !CedulaID || !Nombre || !Empresa || !Fecha) {
+    return res.status(400).json({ message: 'Faltan datos requeridos.' });
+  }
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    const reqTx = new sql.Request(tx);
+
+    // 1) Actualizar SOLO el salario base
+    await reqTx
+      .input('ID', sql.Int, ColaboradorID)
+      .input('SalarioNuevo', sql.Decimal(18, 2), SalarioNuevo)
+      .query('UPDATE Colaboradores SET SalarioBase = @SalarioNuevo WHERE ID = @ID');
+
+    // 2) Insertar auditoría
+    await reqTx
+      .input('ColaboradorID', sql.Int, ColaboradorID)
+      .input('CedulaID', sql.NVarChar, CedulaID)
+      .input('Nombre', sql.NVarChar, Nombre)
+      .input('Empresa', sql.NVarChar, Empresa)
+      .input('SalarioAnterior', sql.Decimal(18, 2), SalarioAnterior)
+      .input('SalarioNuevo2', sql.Decimal(18, 2), SalarioNuevo)
+      .input('Fecha', sql.Date, Fecha)
+      .input('Observaciones', sql.NVarChar(sql.MAX), Observaciones)
+      .query(`
+        INSERT INTO AumentosSalariales
+          (ColaboradorID, CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha, Observaciones)
+        VALUES
+          (@ColaboradorID, @CedulaID, @Nombre, @Empresa, @SalarioAnterior, @SalarioNuevo2, @Fecha, @Observaciones)
+      `);
+
+    await tx.commit();
+    res.json({ message: 'Aumento aplicado correctamente.' });
+  } catch (err) {
+    try { if (tx) await tx.rollback(); } catch { }
+    console.error('Error aplicando aumento:', err);
+    res.status(500).json({ message: 'Error en servidor al aplicar aumento.' });
+  }
+});
+
+// Actualiza solo el salario base (NO pisa otros campos)
+app.put('/api/colaboradores/:id/salario', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { SalarioBase } = req.body;
+
+  if (!id || SalarioBase == null) {
+    return res.status(400).json({ message: 'ID y SalarioBase son requeridos' });
+  }
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    await pool.request()
+      .input('ID', sql.Int, id)
+      .input('SalarioBase', sql.Decimal(18, 2), SalarioBase)
+      .query('UPDATE Colaboradores SET SalarioBase = @SalarioBase WHERE ID = @ID');
+
+    res.json({ message: 'Salario actualizado correctamente' });
+  } catch (err) {
+    console.error('Error actualizando salario:', err);
+    res.status(500).json({ message: 'Error en servidor' });
+  }
+});
+
+// Registrar un aumento salarial (solo inserta historial)
+app.post('/api/aumentos-salariales', async (req, res) => {
+  try {
+    const {
+      ColaboradorID,
+      CedulaID,
+      Nombre,
+      Empresa,
+      SalarioAnterior,
+      SalarioNuevo,
+      Fecha,          // opcional; si no viene, usamos GETDATE()
+      Observaciones
+    } = req.body;
+
+    if (!ColaboradorID || SalarioAnterior == null || SalarioNuevo == null) {
+      return res.status(400).json({ message: 'ColaboradorID, SalarioAnterior y SalarioNuevo son requeridos.' });
+    }
+
+    const pool = await sql.connect(dbConfig);
+    const request = pool.request()
+      .input('ColaboradorID', sql.Int, ColaboradorID)
+      .input('CedulaID', sql.NVarChar(50), CedulaID || null)
+      .input('Nombre', sql.NVarChar(200), Nombre || null)
+      .input('Empresa', sql.NVarChar(150), Empresa || null)
+      .input('SalarioAnterior', sql.Decimal(18, 2), Number(SalarioAnterior))
+      .input('SalarioNuevo', sql.Decimal(18, 2), Number(SalarioNuevo))
+      .input('Observaciones', sql.NVarChar(sql.MAX), Observaciones || null);
+
+    // Si te llega la fecha desde el front, úsala; si no, usa GETDATE()
+    if (Fecha) {
+      request.input('Fecha', sql.Date, Fecha);
+      await request.query(`
+        INSERT INTO AumentosSalariales
+          (ColaboradorID, CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha, Observaciones)
+        VALUES
+          (@ColaboradorID, @CedulaID, @Nombre, @Empresa, @SalarioAnterior, @SalarioNuevo, @Fecha, @Observaciones)
+      `);
+    } else {
+      await request.query(`
+        INSERT INTO AumentosSalariales
+          (ColaboradorID, CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha, Observaciones)
+        VALUES
+          (@ColaboradorID, @CedulaID, @Nombre, @Empresa, @SalarioAnterior, @SalarioNuevo, GETDATE(), @Observaciones)
+      `);
+    }
+
+    res.json({ message: 'Aumento registrado en historial correctamente.' });
+  } catch (err) {
+    console.error('Error registrando aumento:', err);
+    res.status(500).json({ message: 'Error en servidor al registrar aumento.' });
+  }
+});
+
+// ✅ Listar aumentos salariales (con filtro por localidad/empresa)
+// Acepta: /api/aumentos-salariales?localidad=TECHNO%20NOAH
+//         /api/aumentos-salariales?empresa=TECHNO%20NOAH
+//         /api/aumentos-salariales           (sin filtro -> devuelve todos)
+app.get(['/api/aumentos-salariales', '/api/aumentos'], async (req, res) => {
+  try {
+    const empresa = (req.query.localidad || req.query.empresa || '').trim();
+
+    const pool = await sql.connect(dbConfig);
+    let query = `
+      SELECT
+        ID,
+        ColaboradorID,
+        CedulaID,
+        Nombre,
+        Empresa,
+        SalarioAnterior,
+        SalarioNuevo,
+        Fecha,
+        Observaciones
+      FROM AumentosSalariales
+    `;
+
+    const request = pool.request();
+
+    if (empresa) {
+      query += ' WHERE Empresa = @Empresa';
+      request.input('Empresa', sql.NVarChar, empresa);
+    }
+
+    query += ' ORDER BY Fecha DESC, ID DESC';
+
+    const result = await request.query(query);
+    // Devuelve un array limpio (lo que espera tu front)
+    res.json(result.recordset || []);
+  } catch (err) {
+    console.error('Error al obtener aumentos salariales:', err);
+    res.status(500).json({ message: 'Error al obtener aumentos salariales' });
+  }
+});
+
+
+// ✅ Crear registro en AumentosSalariales
+// Body esperado: { ColaboradorID?, CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha?, Observaciones? }
+app.post('/api/aumentos-salariales', async (req, res) => {
+  try {
+    const {
+      ColaboradorID,
+      CedulaID,
+      Nombre,
+      Empresa,
+      SalarioAnterior,
+      SalarioNuevo,
+      Fecha,
+      Observaciones
+    } = req.body;
+
+    const pool = await sql.connect(dbConfig);
+
+    const result = await pool.request()
+      .input('ColaboradorID', sql.Int, ColaboradorID || null)
+      .input('CedulaID', sql.NVarChar, CedulaID || '')
+      .input('Nombre', sql.NVarChar, Nombre || '')
+      .input('Empresa', sql.NVarChar, Empresa || '')
+      .input('SalarioAnterior', sql.Decimal(18, 2), Number(SalarioAnterior || 0))
+      .input('SalarioNuevo', sql.Decimal(18, 2), Number(SalarioNuevo || 0))
+      .input('Fecha', sql.Date, Fecha || new Date())
+      .input('Observaciones', sql.NVarChar(sql.MAX), Observaciones || '')
+      .query(`
+        INSERT INTO AumentosSalariales
+          (ColaboradorID, CedulaID, Nombre, Empresa, SalarioAnterior, SalarioNuevo, Fecha, Observaciones)
+        VALUES
+          (@ColaboradorID, @CedulaID, @Nombre, @Empresa, @SalarioAnterior, @SalarioNuevo, @Fecha, @Observaciones);
+
+        SELECT SCOPE_IDENTITY() AS ID;
+      `);
+
+    const newId = result.recordset?.[0]?.ID;
+    res.status(201).json({ id: newId });
+  } catch (err) {
+    console.error('Error al guardar aumento salarial:', err);
+    res.status(500).json({ message: 'Error al guardar aumento salarial' });
+  }
+});
