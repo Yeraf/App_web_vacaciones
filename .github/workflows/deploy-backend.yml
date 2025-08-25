@@ -1,0 +1,64 @@
+name: Build & Deploy backend (Node) to Azure Web App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: planilla-ys-cr   # <-- nombre exacto de tu Web App (backend)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      # Instalamos SOLO el backend
+      - name: Install backend deps (npm ci)
+        working-directory: backend
+        run: npm ci
+
+      # (Opcional) correr tests del backend si tienes
+      # - name: Test backend
+      #   working-directory: backend
+      #   run: npm test --if-present
+
+      # Empaquetamos SOLO el backend como artefacto de despliegue
+      - name: Prepare artifact
+        run: |
+          mkdir -p release
+          cp -R backend/* release/
+          # Si tienes archivos que NO quieres desplegar, elimínalos aquí:
+          # rm -rf release/.env
+          # rm -rf release/tests
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-artifact
+          path: release
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-artifact
+          path: .
+
+      # Despliegue usando Publish Profile (mucho más simple)
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: .
