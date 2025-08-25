@@ -2721,3 +2721,15 @@ app.post('/api/aumentos-salariales', async (req, res) => {
     res.status(500).json({ message: 'Error al guardar aumento salarial' });
   }
 });
+
+// Endpoint de salud básico
+app.get('/health', async (_req, res) => {
+  try {
+    // (Opcional) ping a la BD para chequear dependencia crítica
+    // const pool = await sql.connect(dbConfig);
+    // await pool.request().query('SELECT 1');
+    res.status(200).send('OK');
+  } catch (e) {
+    res.status(500).send('UNHEALTHY');
+  }
+});
