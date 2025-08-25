@@ -20,22 +20,17 @@ jobs:
         with:
           node-version: '20.x'
 
-      # Instalar dependencias SOLO del backend
+      # (Opcional) Instalar deps sólo para comprobar que el backend resuelve
       - name: Install backend deps
         working-directory: backend
         run: npm ci
 
-      # Empaquetar SOLO el backend para desplegar
-      - name: Prepare artifact
-        run: |
-          mkdir -p release
-          cp -R backend/* release/
-
-      - name: Upload artifact
+      # ⬇️ Sube como artefacto DIRECTAMENTE la carpeta backend (sin node_modules si prefieres quitar el paso anterior)
+      - name: Upload artifact (backend folder)
         uses: actions/upload-artifact@v4
         with:
           name: backend-artifact
-          path: release
+          path: backend
 
   deploy:
     runs-on: ubuntu-latest
@@ -47,9 +42,11 @@ jobs:
           name: backend-artifact
           path: .
 
-      - name: Login to Azure using publish profile
+      # ⬇️ Publica la carpeta backend (aquí sí existe package.json en ./backend)
+      - name: Deploy to Azure Web App (publish profile)
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .
+          package: backend
+
