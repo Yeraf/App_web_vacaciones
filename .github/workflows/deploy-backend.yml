@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: planilla-ys-cr   # <-- nombre EXACTO del App Service de backend
+  AZURE_WEBAPP_NAME: planilla-ys-cr   
 
 jobs:
   build:
@@ -20,12 +20,11 @@ jobs:
         with:
           node-version: '20.x'
 
-      # (Opcional) Instalar deps sólo para comprobar que el backend resuelve
+    
       - name: Install backend deps
         working-directory: backend
         run: npm ci
 
-      # ⬇️ Sube como artefacto DIRECTAMENTE la carpeta backend (sin node_modules si prefieres quitar el paso anterior)
       - name: Upload artifact (backend folder)
         uses: actions/upload-artifact@v4
         with:
@@ -42,7 +41,6 @@ jobs:
           name: backend-artifact
           path: .
 
-      # ⬇️ Publica la carpeta backend (aquí sí existe package.json en ./backend)
       - name: Deploy to Azure Web App (publish profile)
         uses: azure/webapps-deploy@v3
         with:
