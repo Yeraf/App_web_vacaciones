@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: planilla-ys-cr  # <-- nombre EXACTO de tu App Service
+  AZURE_WEBAPP_NAME: planilla-ys-cr
 
 jobs:
   build:
@@ -30,6 +30,7 @@ jobs:
         run: |
           mkdir -p release
           cp -R backend/* release/
+          rm -f release/.env
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
