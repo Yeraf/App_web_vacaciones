@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: planilla-ys-cr   
+  AZURE_WEBAPP_NAME: planilla-ys-cr  # <-- nombre EXACTO de tu App Service
 
 jobs:
   build:
@@ -20,16 +20,22 @@ jobs:
         with:
           node-version: '20.x'
 
-    
+      
       - name: Install backend deps
         working-directory: backend
         run: npm ci
 
-      - name: Upload artifact (backend folder)
+      
+      - name: Prepare artifact
+        run: |
+          mkdir -p release
+          cp -R backend/* release/
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-artifact
-          path: backend
+          path: release
 
   deploy:
     runs-on: ubuntu-latest
@@ -39,11 +45,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-artifact
-          path: .
+          path: release
 
       - name: Deploy to Azure Web App (publish profile)
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: backend
+          package: ./release
