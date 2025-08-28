@@ -19,6 +19,20 @@ const corsOptions = {
   allowedHeaders: ['Content-Type'],
 };
 
+const cors = require('cors');
+
+const allowed = [
+  'http://localhost:3000',
+  'https://<TU-FRONTEND>.azurestaticapps.net' // ← reemplaza por tu dominio real
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowed.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  }
+}));
+
 app.get("/api/vacaciones/ultimo-numero", async (req, res) => {
   const localidad = req.query.localidad || '';
   try {

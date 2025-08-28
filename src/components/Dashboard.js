@@ -1,3 +1,4 @@
+import { api } from "../apiBase";
 import React, { useState, useEffect, forwardRef, useMemo } from "react";
 import html2pdf from "html2pdf.js";
 import * as XLSX from 'xlsx';
@@ -268,10 +269,15 @@ export const Dashboard = () => {
     if (!valeAEliminar) return;
     try {
       setEliminandoVale(true);
-      const resp = await fetch(`http://localhost:3001/api/vales/${valeAEliminar.ID}`, {
-        method: "DELETE"
+
+      const resp = await api(`/api/vales/${valeAEliminar.ID}`, {
+        method: "DELETE",
       });
-      if (!resp.ok) throw new Error("Error al eliminar en servidor");
+
+      if (!resp.ok) {
+        const msg = await resp.text().catch(() => "");
+        throw new Error(msg || "Error al eliminar en servidor");
+      }
 
       // ✅ refresco inmediato en la UI
       setListaVales(prev => prev.filter(item => item.ID !== valeAEliminar.ID));

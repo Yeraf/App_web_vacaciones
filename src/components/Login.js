@@ -1,4 +1,5 @@
-// src/Login.js
+
+import { apiFetch } from "./apiBase";
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // import { useEffect } from 'react'; // Asegúrate de tener esta línea al inicio del archivo
@@ -27,43 +28,11 @@ export const Login = () => {
     }
   };
 
-
-  // Mover hormiga 
-  // useEffect(() => {
-  //   const ant = document.getElementById("ant");
-
-  //   const moveAnt = () => {
-  //     if (!ant) return;
-
-  //     const x = Math.random() * window.innerWidth;
-  //     const y = Math.random() * window.innerHeight;
-
-  //     ant.style.transform = `translate(${x}px, ${y}px) rotate(${Math.random() * 360}deg)`;
-  //   };
-
-  //   const interval = setInterval(() => {
-  //     // Mostrar u ocultar la hormiga aleatoriamente
-  //     const visible = Math.random() > 0.5;
-  //     if (visible) {
-  //       ant.style.opacity = 1;
-  //       moveAnt();
-  //     } else {
-  //       ant.style.opacity = 0;
-  //     }
-  //   }, 4000); // cada 4s
-
-  //   return () => clearInterval(interval);
-  // }, []);
-
-  // Aquí hacemos el Login
-
   const handleLogin = async (e) => {
     e.preventDefault();
-
     try {
-      const res = await fetch("http://localhost:3001/api/login", {
+      const res = await apiFetch("/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ correo, contrasena }),
       });
 
@@ -77,33 +46,24 @@ export const Login = () => {
       if (data.success && data.usuario) {
         const usuario = data.usuario;
 
-        // Guardar en localStorage de forma segura
         localStorage.setItem("usuario", JSON.stringify(usuario));
-
         if (usuario.Localidad) {
           localStorage.setItem("localidad", usuario.Localidad);
         } else {
-          console.warn("Localidad no encontrada en el objeto de usuario.");
           localStorage.removeItem("localidad");
         }
 
-        // Solución: Redirige como si diera F5
-        window.location.href = "/";
-
-        // Esperar brevemente para garantizar que el almacenamiento esté completo
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Navegar solo si todo está correcto
+        // navega directo (evita doble navegación)
         navigate("/dashboard");
       } else {
         alert(data.message || "Credenciales inválidas");
       }
-
     } catch (error) {
       console.error("Error al iniciar sesión:", error);
       alert("Error al iniciar sesión");
     }
   };
+
 
   return (
     <div>
