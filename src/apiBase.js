@@ -1,30 +1,33 @@
 // src/apiBase.js
 
-// Base que se inyecta en build por el workflow (o por .env.production local)
-const BUILD_BASE = (process.env.REACT_APP_API_BASE || "").replace(/\/+$/, "");
+// Base inyectada por el build (workflow) o por .env.production
+const RAW = (process.env.REACT_APP_API_BASE || "").replace(/\/+$/, "");
 
-// En dev, si no hay REACT_APP_API_BASE, caemos a localhost.
-// En prod, si no hay REACT_APP_API_BASE (no debería pasar), NO usamos localhost.
-function resolveApiBase() {
-  if (BUILD_BASE) return BUILD_BASE;
-  if (process.env.NODE_ENV === "development") return "http://localhost:3001";
-  return ""; // fuerza error visible si faltó configurar
-}
+// En dev, si no hay REACT_APP_API_BASE, usamos localhost.
+// En prod, si falta (no debería), quedará vacío para que se note el error.
+export const API_BASE =
+  RAW || (process.env.NODE_ENV === "development" ? "http://localhost:3001" : "");
 
-export const API_BASE = resolveApiBase();
-
-// Helper para pegarle SIEMPRE a /api del backend
+// === NUEVA: helper que SIEMPRE pega a /api ===
+// Uso: apiFetch("/login", { method:"POST", body: JSON.stringify({...}) })
 export function apiFetch(path, init = {}) {
   const p = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_BASE}/api${p}`;
-
   const headers = {
     "Content-Type": "application/json",
     ...(init.headers || {}),
   };
-
-  // Descomenta para ver a dónde llama en runtime:
-  // console.log("[apiFetch]", { url, API_BASE, NODE_ENV: process.env.NODE_ENV });
-
   return fetch(url, { ...init, headers });
 }
+
+// === COMPAT: helper antiguo 'api' ===
+// - Si te pasan "/api/..." -> queda `${API_BASE}/api/...`
+// - Si te pasan "http..."  -> se usa tal cual (no se toca)
+// Esto evita romper componentes que aún usan { api }.
+export function api(path, init) {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  return fetch(url, init);
+}
+
+// También exportamos 'API' para compatibilidad con código viejo que lo usaba.
+export const API = API_BASE;
