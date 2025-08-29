@@ -84,16 +84,18 @@ app.post('/api/login', async (req, res) => {
 app.use(express.json({ limit: '5mb' })); // o más si lo necesita
 
 // Configuración de conexión
+// Configuración de conexión (usa AZURE en prod, local en dev)
 const dbConfig = {
-  user: "sa",
-  password: "VERYlife8585",
-  server: "DESKTOP-UN57ULG",
-  database: "VacacionesYS",
+  user: process.env.DB_USER || "sa",
+  password: process.env.DB_PASSWORD || "VERYlife8585",
+  server: process.env.DB_SERVER || "DESKTOP-UN57ULG",
+  database: process.env.DB_DATABASE || "VacacionesYS",
   options: {
-    encrypt: false,
-    trustServerCertificate: true
+    encrypt: !!process.env.DB_SERVER,        // true en Azure SQL
+    trustServerCertificate: !process.env.DB_SERVER // true en local, false en Azure
   }
 };
+
 
 // Conexión inicial
 sql.connect(dbConfig).then(() => {
