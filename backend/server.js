@@ -1,63 +1,58 @@
+// Carga .env en desarrollo (en Azure no hace falta)
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
-const express = require('express');
-const app = express();
-const sql = require('mssql');
-const cors = require('cors');
-app.use(cors());
 
+const express = require('express');
+const cors = require('cors');
+const sql = require('mssql');
+
+const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors()); // 👈 permite solicitudes entre localhost:3000 ↔ 3001
-app.use(express.json());
+// (Opcional) si usas Azure detrás de proxy
+app.set('trust proxy', 1);
 
-// ✅ Define primero las opciones CORS
-const corsOptions = {
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type'],
-};
-
-const cors = require('cors');
-
-const allowed = [
+// 🔐 Orígenes permitidos: tu SWA + localhost dev + variable opcional
+const allowedOrigins = [
+  'https://lively-ground-01f83b11e.1.azurestaticapps.net', // ← TU SWA
   'http://localhost:3000',
-  'https://<TU-FRONTEND>.azurestaticapps.net' // ← reemplaza por tu dominio real
-];
+  process.env.FRONTEND_ORIGIN,                               // opcional, si la defines en Azure
+].filter(Boolean);
 
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowed.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS'));
-  }
-}));
-
-app.get("/api/vacaciones/ultimo-numero", async (req, res) => {
-  const localidad = req.query.localidad || '';
-  try {
-    const pool = await sql.connect(dbConfig);
-    const result = await pool.request()
-      .input("Empresa", sql.NVarChar, localidad)
-      .query(`
-        SELECT TOP 1 NumeroBoleta
-        FROM BoletaVacaciones
-        WHERE Empresa = @Empresa
-        ORDER BY ID DESC
-      `);
-    const ultimo = result.recordset[0]?.NumeroBoleta || 'NINGUNO';
-    res.json({ ultimo });
-  } catch (error) {
-    console.error("❌ Error al obtener último número:", error);
-    res.status(500).json({ message: "Error interno" });
-  }
+// Asegura que el navegador trate distinto por Origin
+app.use((req, res, next) => {
+  res.header('Vary', 'Origin');
+  next();
 });
 
-// ✅ Luego aplica los middlewares
-app.use(cors(corsOptions));
+// ✅ CORS debe ir ANTES de cualquier ruta
+app.use(
+  cors({
+    origin(origin, cb) {
+      // Permite llamadas sin Origin (curl/Postman/health)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS: ' + origin));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    // credentials: true, // Actívalo si usas cookies/sesiones
+  })
+);
+
+// Responder todos los preflight
+app.options('*', cors());
+
+// Parser JSON (ponlo después de CORS y antes de rutas)
 app.use(express.json({ limit: '5mb' }));
+
+// ---------- desde aquí siguen TUS rutas y lógica existente ----------
+// (no repitas app.use(cors()) ni vuelvas a declarar const cors = require('cors'))
+
 // Login
 
+// Login
 app.post('/api/login', async (req, res) => {
   const { correo, contrasena } = req.body;
 
@@ -82,6 +77,7 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
+
 
 
 
