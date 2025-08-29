@@ -1,6 +1,6 @@
 // src/apiBase.js
 
-// Base que se inyecta en build por el workflow (o por .env.production en raíz del proyecto)
+// Base que se inyecta en build por el workflow (o por .env.production local)
 const BUILD_BASE = (process.env.REACT_APP_API_BASE || "").replace(/\/+$/, "");
 
 // En dev, si no hay REACT_APP_API_BASE, caemos a localhost.
@@ -23,7 +23,7 @@ export function apiFetch(path, init = {}) {
     ...(init.headers || {}),
   };
 
-  // Debug opcional: ver a dónde está llamando en consola
+  // Descomenta para ver a dónde llama en runtime:
   // console.log("[apiFetch]", { url, API_BASE, NODE_ENV: process.env.NODE_ENV });
 
   return fetch(url, { ...init, headers });

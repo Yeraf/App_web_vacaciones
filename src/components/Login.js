@@ -2,7 +2,6 @@
 import { apiFetch } from "../apiBase";
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// import { useEffect } from 'react'; // Asegúrate de tener esta línea al inicio del archivo
 
 
 export const Login = () => {
