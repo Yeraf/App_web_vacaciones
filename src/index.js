@@ -1,10 +1,13 @@
-import { installFetchBase } from "./fetchShim";
-installFetchBase();
+// src/index.js
 import React from 'react';
 import { createRoot } from "react-dom/client";
 import './index.css';
 import App from './App';
-import { BrowserRouter } from 'react-router-dom'; // 👈 importar
+import { BrowserRouter } from 'react-router-dom';
+import { installFetchBase } from "./fetchShim";  // ← importa, pero NO lo ejecutes todavía
+
+// ✅ Ejecuta funciones DESPUÉS de todos los imports
+installFetchBase();
 
 const container = document.getElementById("root");
 const root = createRoot(container);
@@ -14,17 +17,3 @@ root.render(
     <App />
   </BrowserRouter>
 );
-
-
-// import React from 'react';
-// import {createRoot} from "react-dom/client";
-// import './index.css';
-// import App from './App';
-
-// const container = document.getElementById("root");
-// const root = createRoot(container);
-
-// root.render(
-//   <App />
-// );
-
