@@ -1,5 +1,6 @@
+// src/components/router/MisRutas.js
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, BrowserRouter, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { Dashboard } from '../Dashboard';
 import { Footer } from '../layout/Footer';
 import { Contacto } from '../Contacto';
@@ -13,24 +14,58 @@ import { Horarios } from '../Horarios';
 import { Login } from '../Login';
 import { RutaProtegida } from '../helpers/RutaProtegida';
 import { Localidades } from '../Localidades';
+// (opcional, si creaste auth.js con eventos) import { getUser } from '../auth';
 
 export const MisRutas = () => {
   const location = useLocation();
+
+  // ⚙️ estado
   const [usuario, setUsuario] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // ¿estamos en /login?
+  const esLogin = location.pathname === "/login";
 
   useEffect(() => {
-    const stored = localStorage.getItem('usuario');
-    if (stored) {
-      setUsuario(JSON.parse(stored));
-    }
-    // Simula carga
-    setTimeout(() => {
-      setLoading(false);
-    }, 450); // medio segundo
-  }, []);
+    // Lee usuario al montar
+    try {
+      const stored = localStorage.getItem('usuario');
+      if (stored) setUsuario(JSON.parse(stored));
+    } catch (_) {}
 
-  const esLogin = location.pathname === "/login";
-  const [loading, setLoading] = useState(true);
+    // Escucha cambios (si usas auth.js que dispara eventos 'login'/'logout')
+    const onLogin = () => {
+      try {
+        const u = JSON.parse(localStorage.getItem('usuario') || "null");
+        setUsuario(u);
+      } catch { setUsuario(null); }
+    };
+    const onLogout = () => setUsuario(null);
+
+    window.addEventListener('login', onLogin);
+    window.addEventListener('logout', onLogout);
+
+    // Multi-pestaña: si otro tab hace login/logout
+    const onStorage = (e) => {
+      if (e.key === 'usuario') {
+        try {
+          const u = e.newValue ? JSON.parse(e.newValue) : null;
+          setUsuario(u);
+        } catch { setUsuario(null); }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Simula carga (tu loader)
+    const t = setTimeout(() => setLoading(false), 450);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('login', onLogin);
+      window.removeEventListener('logout', onLogout);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -42,16 +77,18 @@ export const MisRutas = () => {
   }
 
   if (!usuario && !esLogin) {
-    return <Navigate to="/login" />;
+    // guarda a dónde iba para que Login pueda devolverlo
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return (
     <>
+      {/* Ruta pública de login sin layout */}
       <Routes>
-        {/* Rutas públicas como login SIN layout */}
         <Route path="/login" element={<Login />} />
       </Routes>
 
+      {/* Layout + rutas protegidas si hay usuario y no estamos en /login */}
       {!esLogin && usuario && (
         <>
           <HeaderNav />
