@@ -14,58 +14,31 @@ import { Horarios } from '../Horarios';
 import { Login } from '../Login';
 import { RutaProtegida } from '../helpers/RutaProtegida';
 import { Localidades } from '../Localidades';
-// (opcional, si creaste auth.js con eventos) import { getUser } from '../auth';
 
 export const MisRutas = () => {
   const location = useLocation();
-
-  // ⚙️ estado
   const [usuario, setUsuario] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ¿estamos en /login?
-  const esLogin = location.pathname === "/login";
-
+  // 🔄 sincroniza usuario al montar, al cambiar ruta y cuando Login llama saveUser()
   useEffect(() => {
-    // Lee usuario al montar
-    try {
-      const stored = localStorage.getItem('usuario');
-      if (stored) setUsuario(JSON.parse(stored));
-    } catch (_) {}
-
-    // Escucha cambios (si usas auth.js que dispara eventos 'login'/'logout')
-    const onLogin = () => {
+    const sync = () => {
       try {
-        const u = JSON.parse(localStorage.getItem('usuario') || "null");
-        setUsuario(u);
-      } catch { setUsuario(null); }
-    };
-    const onLogout = () => setUsuario(null);
-
-    window.addEventListener('login', onLogin);
-    window.addEventListener('logout', onLogout);
-
-    // Multi-pestaña: si otro tab hace login/logout
-    const onStorage = (e) => {
-      if (e.key === 'usuario') {
-        try {
-          const u = e.newValue ? JSON.parse(e.newValue) : null;
-          setUsuario(u);
-        } catch { setUsuario(null); }
+        const stored = localStorage.getItem('usuario');
+        setUsuario(stored ? JSON.parse(stored) : null);
+      } catch {
+        setUsuario(null);
       }
+      setLoading(false);
     };
-    window.addEventListener('storage', onStorage);
+    sync();
 
-    // Simula carga (tu loader)
-    const t = setTimeout(() => setLoading(false), 450);
+    const onAuthChanged = () => sync();
+    window.addEventListener('auth-changed', onAuthChanged);
+    return () => window.removeEventListener('auth-changed', onAuthChanged);
+  }, [location.pathname]); // re-sincroniza si cambias de página
 
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('login', onLogin);
-      window.removeEventListener('logout', onLogout);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
+  const esLogin = location.pathname === "/login";
 
   if (loading) {
     return (
@@ -77,18 +50,16 @@ export const MisRutas = () => {
   }
 
   if (!usuario && !esLogin) {
-    // guarda a dónde iba para que Login pueda devolverlo
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return (
     <>
-      {/* Ruta pública de login sin layout */}
       <Routes>
+        {/* pública */}
         <Route path="/login" element={<Login />} />
       </Routes>
 
-      {/* Layout + rutas protegidas si hay usuario y no estamos en /login */}
       {!esLogin && usuario && (
         <>
           <HeaderNav />
