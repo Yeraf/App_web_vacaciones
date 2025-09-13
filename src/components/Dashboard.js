@@ -2900,6 +2900,88 @@ export const Dashboard = () => {
     html2pdf().set(options).from(elemento).save();
   };
 
+
+  // ✅ PDF de Reporte Planilla: 4 registros por página, con encabezado repetido
+  const descargarPDFReportePlanilla4x = () => {
+    try {
+      const host = tablaReporteRef?.current || document.getElementById('reporte-planilla');
+      if (!host) return alert("No se encontró el contenido del reporte.");
+
+      // Busca una tabla dentro del contenedor del reporte
+      const table = host.querySelector('table');
+      if (!table) {
+        // Fallback: si no hay tabla, exporta el contenedor entero como está
+        return html2pdf().set({
+          margin: 10,
+          filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
+          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] }
+        }).from(host.cloneNode(true)).save();
+      }
+
+      const theadHTML = table.querySelector('thead')?.outerHTML || '';
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      if (rows.length === 0) return alert("No hay filas en el reporte.");
+
+      // Creamos un contenedor temporal con tablas de 4 filas c/u
+      const container = document.createElement('div');
+
+      // Inyecta estilos para que se vea igual (sin depender del CSS externo)
+      const style = document.createElement('style');
+      style.textContent = `
+      @page { size: A4; margin: 12mm; }
+      body { font-family: Arial, sans-serif; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #222; padding: 4px; font-size: 11px; vertical-align: middle; }
+      thead th { background: #eee; }
+      thead { display: table-header-group; } /* por si el motor lo respeta */
+    `;
+      container.appendChild(style);
+
+      for (let i = 0; i < rows.length; i += 4) {
+        const wrapper = document.createElement('div');
+        const t = document.createElement('table');
+
+        // preserva clases de tu tabla por si usan estilos bootstrap
+        t.className = table.className || '';
+
+        // nueva tabla con el mismo thead y un tbody con 4 filas
+        t.innerHTML = `${theadHTML}<tbody></tbody>`;
+        const tb = t.querySelector('tbody');
+
+        rows.slice(i, i + 4).forEach(r => tb.appendChild(r.cloneNode(true)));
+        wrapper.appendChild(t);
+        container.appendChild(wrapper);
+
+        // Fuerza salto de página entre bloques (excepto el último)
+        if (i + 4 < rows.length) {
+          const br = document.createElement('div');
+          br.className = 'html2pdf__page-break';
+          container.appendChild(br);
+        }
+      }
+
+      // Generar PDF
+      html2pdf().set({
+        margin: 10, // ajusta si quieres más/menos margen
+        filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
+        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',      // Cambia a 'letter' si prefieres
+          orientation: 'portrait' // si tu tabla es ancha, pon 'landscape'
+        },
+        pagebreak: { mode: ['css', 'legacy'] } // respeta .html2pdf__page-break
+      }).from(container).save();
+
+    } catch (e) {
+      console.error("Error generando PDF:", e);
+      alert("No se pudo generar el PDF.");
+    }
+  };
+
+
   const obtenerUltimoNumeroBoleta = async () => {
     try {
       const res = await fetch(`http://localhost:3001/api/vacaciones/ultimoboleta?localidad=${encodeURIComponent(localidad)}`);
@@ -6136,7 +6218,7 @@ export const Dashboard = () => {
                 <button className="btn btn-primary" onClick={generarReportePagos}>Generar</button>
                 {/* 👇 ahora imprime SOLO las colillas */}
                 <button className="btn btn-outline-primary" onClick={imprimirSoloColillas}>Imprimir</button>
-                <button className="btn btn-outline-danger" onClick={descargarPDFColillas}>Descargar PDF</button>
+                <button className="btn btn-outline-danger" onClick={descargarPDFReportePlanilla4x}>Descargar PDF</button>
               </div>
             </div>
 
