@@ -2900,80 +2900,76 @@ export const Dashboard = () => {
     html2pdf().set(options).from(elemento).save();
   };
 
-
-  // ✅ PDF de Reporte Planilla: 4 registros por página, con encabezado repetido
+  // ✅ PDF: agrupa 4 "colillas" por página desde #contenido-colillas / colillasRef
   const descargarPDFReportePlanilla4x = () => {
     try {
-      const host = tablaReporteRef?.current || document.getElementById('reporte-planilla');
-      if (!host) return alert("No se encontró el contenido del reporte.");
+      // Usa tu ref o el id de tu contenedor actual
+      const host = (typeof colillasRef !== "undefined" && colillasRef?.current)
+        ? colillasRef.current
+        : document.getElementById("contenido-colillas");
 
-      // Busca una tabla dentro del contenedor del reporte
-      const table = host.querySelector('table');
-      if (!table) {
-        // Fallback: si no hay tabla, exporta el contenedor entero como está
-        return html2pdf().set({
-          margin: 10,
-          filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
-          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'] }
-        }).from(host.cloneNode(true)).save();
+      if (!host) return alert("No se encontró el contenedor del reporte (contenido-colillas).");
+
+      // Cada “colilla” es una tabla .colilla (como en tu JSX)
+      const colillas = Array.from(host.querySelectorAll(".colilla"));
+      if (colillas.length === 0) {
+        // Si por alguna razón no hay .colilla, exporta el contenedor tal cual
+        return html2pdf()
+          .set({
+            margin: 10,
+            filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
+            html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+            pagebreak: { mode: ["css", "legacy"] }
+          })
+          .from(host.cloneNode(true))
+          .save();
       }
 
-      const theadHTML = table.querySelector('thead')?.outerHTML || '';
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      if (rows.length === 0) return alert("No hay filas en el reporte.");
+      // Construye un contenedor temporal con grupos de 4 colillas por página
+      const container = document.createElement("div");
 
-      // Creamos un contenedor temporal con tablas de 4 filas c/u
-      const container = document.createElement('div');
-
-      // Inyecta estilos para que se vea igual (sin depender del CSS externo)
-      const style = document.createElement('style');
+      // Estilos embebidos para que el PDF se vea bien aunque no cargue tu CSS externo
+      const style = document.createElement("style");
       style.textContent = `
       @page { size: A4; margin: 12mm; }
       body { font-family: Arial, sans-serif; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { border: 1px solid #222; padding: 4px; font-size: 11px; vertical-align: middle; }
-      thead th { background: #eee; }
-      thead { display: table-header-group; } /* por si el motor lo respeta */
+      thead.table-dark th { background: #eee !important; color: #000 !important; }
+      .colilla { margin-bottom: 10px; } /* separa las tablas dentro de la página */
     `;
       container.appendChild(style);
 
-      for (let i = 0; i < rows.length; i += 4) {
-        const wrapper = document.createElement('div');
-        const t = document.createElement('table');
+      for (let i = 0; i < colillas.length; i += 4) {
+        const page = document.createElement("div");
 
-        // preserva clases de tu tabla por si usan estilos bootstrap
-        t.className = table.className || '';
+        // Clona 4 tablas (colillas) para esta página
+        colillas.slice(i, i + 4).forEach(tbl => {
+          page.appendChild(tbl.cloneNode(true));
+        });
 
-        // nueva tabla con el mismo thead y un tbody con 4 filas
-        t.innerHTML = `${theadHTML}<tbody></tbody>`;
-        const tb = t.querySelector('tbody');
+        container.appendChild(page);
 
-        rows.slice(i, i + 4).forEach(r => tb.appendChild(r.cloneNode(true)));
-        wrapper.appendChild(t);
-        container.appendChild(wrapper);
-
-        // Fuerza salto de página entre bloques (excepto el último)
-        if (i + 4 < rows.length) {
-          const br = document.createElement('div');
-          br.className = 'html2pdf__page-break';
+        // Inserta salto de página entre grupos
+        if (i + 4 < colillas.length) {
+          const br = document.createElement("div");
+          br.className = "html2pdf__page-break";
           container.appendChild(br);
         }
       }
 
-      // Generar PDF
-      html2pdf().set({
-        margin: 10, // ajusta si quieres más/menos margen
-        filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
-        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',      // Cambia a 'letter' si prefieres
-          orientation: 'portrait' // si tu tabla es ancha, pon 'landscape'
-        },
-        pagebreak: { mode: ['css', 'legacy'] } // respeta .html2pdf__page-break
-      }).from(container).save();
+      // Generar el PDF
+      html2pdf()
+        .set({
+          margin: 10,
+          filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
+          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] }
+        })
+        .from(container)
+        .save();
 
     } catch (e) {
       console.error("Error generando PDF:", e);
