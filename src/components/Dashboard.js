@@ -2900,7 +2900,7 @@ export const Dashboard = () => {
     html2pdf().set(options).from(elemento).save();
   };
 
-  // ✅ PDF simple y robusto: usa el mismo DOM ya renderizado, aplica estilos y exporta
+  // ✅ PDF: una colilla por fila (ancho completo), usando el DOM ya renderizado
   const descargarPDFReportePlanilla4x = () => {
     try {
       const host =
@@ -2913,49 +2913,48 @@ export const Dashboard = () => {
         return;
       }
 
-      // Clonamos TODO el bloque que ya ves (tal cual, con los datos ya pintados)
+      // Clona el contenido ya renderizado con datos
       const wrapper = document.createElement("div");
 
-      // Estilos SOLO para el PDF (no afectan tu UI)
+      // Estilos SOLO para el PDF (no tocan tu UI)
       const style = document.createElement("style");
       style.textContent = `
       @page { size: A4 landscape; margin: 8mm; }
       body { font-family: Arial, sans-serif; }
       .html2pdf__page-break { height: 0; }
 
-      /* 2 colillas por fila (cada colilla es tu <table> con class "colilla") */
+      /* 🔸 UNA por fila: ancho completo y separación inferior */
       .colilla {
-        display: inline-block !important;
-        width: 49% !important;
-        vertical-align: top !important;
-        margin: 0 0.5% 12px 0.5% !important;
+        display: block !important;
+        width: 100% !important;
+        margin: 0 0 12px 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
 
       table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
-      thead { display: table-header-group; } /* por si una colilla se parte entre páginas */
+      thead { display: table-header-group; } /* mantiene encabezado si la tabla se parte */
       th, td {
         border: 1px solid #444 !important;
-        padding: 6px !important;
-        font-size: 10px !important;
+        padding: 7px !important;                 /* un poco más de aire */
+        font-size: 10px !important;              /* tamaño legible con landscape */
         line-height: 1.25 !important;
-        text-align: center !important;
+        text-align: center !important;           /* centrado */
         vertical-align: middle !important;
         word-wrap: break-word !important;
         overflow-wrap: anywhere !important;
-        color: #111 !important; /* fuerza color por si alguna regla lo ocultaba */
+        color: #111 !important;
       }
       thead th { background: #f5f5f5 !important; font-weight: 700 !important; }
 
-      /* Evitar que estilos bootstrap alteren lo anterior dentro del PDF */
+      /* Evitar que bootstrap "pinte" fondos en el PDF */
       .table, .table * { background: transparent !important; }
     `;
       wrapper.appendChild(style);
 
-      // Clonamos el contenido con datos ya puestos
       const clone = host.cloneNode(true);
       wrapper.appendChild(clone);
 
-      // Generamos el PDF
       html2pdf()
         .set({
           margin: 8,
@@ -2972,6 +2971,7 @@ export const Dashboard = () => {
       alert("No se pudo generar el PDF.");
     }
   };
+
 
 
   const obtenerUltimoNumeroBoleta = async () => {
