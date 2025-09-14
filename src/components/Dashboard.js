@@ -2900,7 +2900,7 @@ export const Dashboard = () => {
     html2pdf().set(options).from(elemento).save();
   };
 
-  // ✅ PDF mejorado: 4 colillas por página (2x2), centrado y landscape
+  // ✅ PDF simple y robusto: usa el mismo DOM ya renderizado, aplica estilos y exporta
   const descargarPDFReportePlanilla4x = () => {
     try {
       const host =
@@ -2908,73 +2908,54 @@ export const Dashboard = () => {
           ? colillasRef.current
           : document.getElementById("contenido-colillas");
 
-      if (!host) return alert("No se encontró el contenedor del reporte (contenido-colillas).");
-
-      const colillas = Array.from(host.querySelectorAll(".colilla"));
-      if (colillas.length === 0) {
-        return html2pdf()
-          .set({
-            margin: 8,
-            filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
-            html2canvas: { scale: 2.2, useCORS: true, scrollY: 0 },
-            jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-            pagebreak: { mode: ["css", "legacy"] }
-          })
-          .from(host.cloneNode(true))
-          .save();
+      if (!host) {
+        alert("No se encontró el contenedor del reporte (contenido-colillas).");
+        return;
       }
 
-      // Contenedor armado para el PDF
-      const container = document.createElement("div");
+      // Clonamos TODO el bloque que ya ves (tal cual, con los datos ya pintados)
+      const wrapper = document.createElement("div");
 
-      // Estilos: landscape, centrado, 2x2 por página, tipografía y espacio
+      // Estilos SOLO para el PDF (no afectan tu UI)
       const style = document.createElement("style");
       style.textContent = `
       @page { size: A4 landscape; margin: 8mm; }
       body { font-family: Arial, sans-serif; }
-      .page { display: block; page-break-inside: avoid; }
       .html2pdf__page-break { height: 0; }
-      /* Coloca 2 colillas por fila */
-      .colilla { 
-        display: inline-block; 
-        width: 49%; 
-        vertical-align: top; 
-        margin: 0 0.5% 12px 0.5%;
+
+      /* 2 colillas por fila (cada colilla es tu <table> con class "colilla") */
+      .colilla {
+        display: inline-block !important;
+        width: 49% !important;
+        vertical-align: top !important;
+        margin: 0 0.5% 12px 0.5% !important;
       }
-      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      th, td { 
-        border: 1px solid #444; 
-        padding: 6px; 
-        font-size: 10px; 
-        line-height: 1.25; 
-        text-align: center; 
-        vertical-align: middle; 
-        word-wrap: break-word;
-        overflow-wrap: anywhere;
+
+      table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
+      thead { display: table-header-group; } /* por si una colilla se parte entre páginas */
+      th, td {
+        border: 1px solid #444 !important;
+        padding: 6px !important;
+        font-size: 10px !important;
+        line-height: 1.25 !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+        word-wrap: break-word !important;
+        overflow-wrap: anywhere !important;
+        color: #111 !important; /* fuerza color por si alguna regla lo ocultaba */
       }
-      thead th { background: #f5f5f5; font-weight: 700; }
+      thead th { background: #f5f5f5 !important; font-weight: 700 !important; }
+
+      /* Evitar que estilos bootstrap alteren lo anterior dentro del PDF */
+      .table, .table * { background: transparent !important; }
     `;
-      container.appendChild(style);
+      wrapper.appendChild(style);
 
-      // Arma páginas: cada .page contiene 4 colillas (2 por fila gracias al inline-block)
-      for (let i = 0; i < colillas.length; i += 4) {
-        const page = document.createElement("div");
-        page.className = "page";
+      // Clonamos el contenido con datos ya puestos
+      const clone = host.cloneNode(true);
+      wrapper.appendChild(clone);
 
-        colillas.slice(i, i + 4).forEach(tbl => {
-          // Clona la tabla para no afectar el DOM original
-          page.appendChild(tbl.cloneNode(true));
-        });
-
-        container.appendChild(page);
-
-        if (i + 4 < colillas.length) {
-          const br = document.createElement("div");
-          br.className = "html2pdf__page-break";
-          container.appendChild(br);
-        }
-      }
-
+      // Generamos el PDF
       html2pdf()
         .set({
           margin: 8,
@@ -2983,7 +2964,7 @@ export const Dashboard = () => {
           jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
           pagebreak: { mode: ["css", "legacy"] }
         })
-        .from(container)
+        .from(wrapper)
         .save();
 
     } catch (e) {
