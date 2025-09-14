@@ -2900,58 +2900,74 @@ export const Dashboard = () => {
     html2pdf().set(options).from(elemento).save();
   };
 
-  // ✅ PDF: agrupa 4 "colillas" por página desde #contenido-colillas / colillasRef
+  // ✅ PDF mejorado: 4 colillas por página (2x2), centrado y landscape
   const descargarPDFReportePlanilla4x = () => {
     try {
-      // Usa tu ref o el id de tu contenedor actual
-      const host = (typeof colillasRef !== "undefined" && colillasRef?.current)
-        ? colillasRef.current
-        : document.getElementById("contenido-colillas");
+      const host =
+        (typeof colillasRef !== "undefined" && colillasRef?.current)
+          ? colillasRef.current
+          : document.getElementById("contenido-colillas");
 
       if (!host) return alert("No se encontró el contenedor del reporte (contenido-colillas).");
 
-      // Cada “colilla” es una tabla .colilla (como en tu JSX)
       const colillas = Array.from(host.querySelectorAll(".colilla"));
       if (colillas.length === 0) {
-        // Si por alguna razón no hay .colilla, exporta el contenedor tal cual
         return html2pdf()
           .set({
-            margin: 10,
+            margin: 8,
             filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
-            html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+            html2canvas: { scale: 2.2, useCORS: true, scrollY: 0 },
+            jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
             pagebreak: { mode: ["css", "legacy"] }
           })
           .from(host.cloneNode(true))
           .save();
       }
 
-      // Construye un contenedor temporal con grupos de 4 colillas por página
+      // Contenedor armado para el PDF
       const container = document.createElement("div");
 
-      // Estilos embebidos para que el PDF se vea bien aunque no cargue tu CSS externo
+      // Estilos: landscape, centrado, 2x2 por página, tipografía y espacio
       const style = document.createElement("style");
       style.textContent = `
-      @page { size: A4; margin: 12mm; }
+      @page { size: A4 landscape; margin: 8mm; }
       body { font-family: Arial, sans-serif; }
+      .page { display: block; page-break-inside: avoid; }
+      .html2pdf__page-break { height: 0; }
+      /* Coloca 2 colillas por fila */
+      .colilla { 
+        display: inline-block; 
+        width: 49%; 
+        vertical-align: top; 
+        margin: 0 0.5% 12px 0.5%;
+      }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      th, td { border: 1px solid #222; padding: 4px; font-size: 11px; vertical-align: middle; }
-      thead.table-dark th { background: #eee !important; color: #000 !important; }
-      .colilla { margin-bottom: 10px; } /* separa las tablas dentro de la página */
+      th, td { 
+        border: 1px solid #444; 
+        padding: 6px; 
+        font-size: 10px; 
+        line-height: 1.25; 
+        text-align: center; 
+        vertical-align: middle; 
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+      }
+      thead th { background: #f5f5f5; font-weight: 700; }
     `;
       container.appendChild(style);
 
+      // Arma páginas: cada .page contiene 4 colillas (2 por fila gracias al inline-block)
       for (let i = 0; i < colillas.length; i += 4) {
         const page = document.createElement("div");
+        page.className = "page";
 
-        // Clona 4 tablas (colillas) para esta página
         colillas.slice(i, i + 4).forEach(tbl => {
+          // Clona la tabla para no afectar el DOM original
           page.appendChild(tbl.cloneNode(true));
         });
 
         container.appendChild(page);
 
-        // Inserta salto de página entre grupos
         if (i + 4 < colillas.length) {
           const br = document.createElement("div");
           br.className = "html2pdf__page-break";
@@ -2959,13 +2975,12 @@ export const Dashboard = () => {
         }
       }
 
-      // Generar el PDF
       html2pdf()
         .set({
-          margin: 10,
+          margin: 8,
           filename: `reporte-planilla-${new Date().toISOString().slice(0, 10)}.pdf`,
-          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          html2canvas: { scale: 2.2, useCORS: true, scrollY: 0 },
+          jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
           pagebreak: { mode: ["css", "legacy"] }
         })
         .from(container)
